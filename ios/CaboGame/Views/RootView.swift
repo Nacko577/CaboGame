@@ -26,7 +26,9 @@ struct RootView: View {
                 MainMenuView(onPlay: { screen = .lobby })
             case .lobby:
                 if viewModel.gameState.hasStarted {
-                    GameTableView()
+                    GameTableView(onLeaveGame: {
+                        viewModel.leaveLobby()
+                    })
                 } else {
                     LobbyView(onBack: {
                         viewModel.leaveLobby()

@@ -26,7 +26,10 @@ fun RootScreen(viewModel: GameViewModel) {
             onPlay = { screen = RootScreen.LOBBY },
             onHowToPlay = { screen = RootScreen.HOW_TO_PLAY }
         )
-        viewModel.gameState.hasStarted -> GameTableScreen(viewModel = viewModel)
+        viewModel.gameState.hasStarted -> GameTableScreen(
+            viewModel = viewModel,
+            onLeaveGame = { viewModel.leaveLobby() }
+        )
         else -> LobbyScreen(
             viewModel = viewModel,
             onBack = {

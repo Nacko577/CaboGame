@@ -12,7 +12,8 @@ struct GameState: Codable {
     var rematchRequestedByHost: Bool
     var readyPlayerIDs: Set<UUID>
     var hasStarted: Bool
-    var currentPlayerPeekedIndices: [Int]
+    // Initial peek tracking per player (each player can peek up to 2 cards during initialPeek).
+    var initialPeekedIndicesByPlayerIndex: [[Int]]
     var playersFinishedInitialPeek: Int
     var initialPeekGraceEndsAt: Date?
 
@@ -28,7 +29,7 @@ struct GameState: Codable {
         self.rematchRequestedByHost = false
         self.readyPlayerIDs = []
         self.hasStarted = false
-        self.currentPlayerPeekedIndices = []
+        self.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: players.count)
         self.playersFinishedInitialPeek = 0
         self.initialPeekGraceEndsAt = nil
     }

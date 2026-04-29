@@ -57,9 +57,9 @@ struct CaboGameEngine {
         state.rematchRequestedByHost = false
         state.readyPlayerIDs = []
         state.hasStarted = true
-        state.currentPlayerPeekedIndices = []
         state.playersFinishedInitialPeek = 0
-        state.initialPeekGraceEndsAt = nil
+        state.initialPeekGraceEndsAt = Date().addingTimeInterval(15)
+        state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
 
         for idx in state.players.indices {
             state.players[idx].hand = Array(repeating: nil, count: 4)
@@ -79,32 +79,24 @@ struct CaboGameEngine {
     }
 
     mutating func peekInitialCard(for playerID: UUID, at handIndex: Int) throws -> Card {
-        try validateTurn(for: playerID)
         guard state.phase == .initialPeek else { throw GameRuleError.invalidPhase }
 
         let playerIndex = try indexOfPlayer(playerID)
         guard state.players[playerIndex].hand.indices.contains(handIndex) else {
             throw GameRuleError.invalidCardIndex
         }
-        guard !state.currentPlayerPeekedIndices.contains(handIndex) else {
+        guard !state.initialPeekedIndicesByPlayerIndex[playerIndex].contains(handIndex) else {
             throw GameRuleError.invalidCardIndex
         }
 
-        state.currentPlayerPeekedIndices.append(handIndex)
-        guard let card = state.players[playerIndex].hand[handIndex] else {
-            throw GameRuleError.invalidCardIndex
-        }
+        state.initialPeekedIndicesByPlayerIndex[playerIndex].append(handIndex)
+        guard let card = state.players[playerIndex].hand[handIndex] else { throw GameRuleError.invalidCardIndex }
 
-        if state.currentPlayerPeekedIndices.count >= 2 {
+        // Count completion when a player reaches 2 peeked cards.
+        if state.initialPeekedIndicesByPlayerIndex[playerIndex].count == 2 {
             state.playersFinishedInitialPeek += 1
-            state.currentPlayerPeekedIndices = []
-
-            if state.playersFinishedInitialPeek >= state.players.count {
-                state.currentPlayerIndex = 0
-                state.initialPeekGraceEndsAt = Date().addingTimeInterval(15)
-            } else {
-                state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.count
-            }
+            // Do not start the game early just because everyone peeked.
+            // The phase transition is governed solely by `initialPeekGraceEndsAt`.
         }
 
         return card
@@ -112,13 +104,13 @@ struct CaboGameEngine {
 
     mutating func beginMainTurnsAfterInitialPeekIfReady(now: Date = Date()) {
         guard state.phase == .initialPeek else { return }
-        guard state.playersFinishedInitialPeek >= state.players.count else { return }
         guard let graceEndsAt = state.initialPeekGraceEndsAt else { return }
         guard now >= graceEndsAt else { return }
 
         state.phase = .waitingForDraw
         state.currentPlayerIndex = 0
-        state.currentPlayerPeekedIndices = []
+        state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
+        state.playersFinishedInitialPeek = 0
         state.initialPeekGraceEndsAt = nil
     }
 

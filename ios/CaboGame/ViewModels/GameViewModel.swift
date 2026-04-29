@@ -288,7 +288,7 @@ final class GameViewModel: ObservableObject {
         specialPeekClearTask = nil
     }
 
-    private func scheduleSpecialPeekClear(after seconds: UInt64 = 4) {
+    private func scheduleSpecialPeekClear(after seconds: UInt64 = 5) {
         specialPeekClearTask?.cancel()
         specialPeekClearTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -376,7 +376,6 @@ final class GameViewModel: ObservableObject {
 
     private func handleInitialPeekGraceIfNeeded() {
         guard gameState.phase == .initialPeek,
-              gameState.playersFinishedInitialPeek >= gameState.players.count,
               let graceEndsAt = gameState.initialPeekGraceEndsAt else {
             initialPeekSecondsRemaining = nil
             initialPeekGraceTask?.cancel()
@@ -387,22 +386,34 @@ final class GameViewModel: ObservableObject {
         let remaining = max(0, Int(ceil(graceEndsAt.timeIntervalSinceNow)))
         initialPeekSecondsRemaining = remaining
 
-        guard isHost else { return }
         if initialPeekGraceTask != nil { return }
+        if remaining == 0 {
+            // Timer ended already; host will advance state on its next update.
+            return
+        }
 
         initialPeekGraceTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
+                guard self.gameState.phase == .initialPeek,
+                      let graceEndsAt = self.gameState.initialPeekGraceEndsAt else {
+                    self.initialPeekSecondsRemaining = nil
+                    self.initialPeekGraceTask = nil
+                    return
+                }
+
                 let secs = max(0, Int(ceil(graceEndsAt.timeIntervalSinceNow)))
                 self.initialPeekSecondsRemaining = secs
                 if secs == 0 {
-                    self.engine.load(state: self.gameState)
-                    self.engine.beginMainTurnsAfterInitialPeekIfReady()
-                    self.gameState = self.engine.state
-                    do {
-                        try self.lobby.send(.gameState(self.gameState))
-                    } catch {
-                        self.lastError = error.localizedDescription
+                    if self.isHost {
+                        self.engine.load(state: self.gameState)
+                        self.engine.beginMainTurnsAfterInitialPeekIfReady()
+                        self.gameState = self.engine.state
+                        do {
+                            try self.lobby.send(.gameState(self.gameState))
+                        } catch {
+                            self.lastError = error.localizedDescription
+                        }
                     }
                     self.initialPeekGraceTask = nil
                     return
@@ -447,7 +458,8 @@ extension GameViewModel: LobbyServiceDelegate {
                    let me = incoming.players.first(where: { $0.name == self.validatedName() }) {
                     self.localPlayerID = me.id
                 }
-                if incoming.currentPlayerID != self.localPlayerID {
+                if incoming.currentPlayerID != self.localPlayerID,
+                   incoming.phase != .initialPeek {
                     self.clearTurnFeedback()
                 }
                 if incoming.phase != .initialPeek {

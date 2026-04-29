@@ -3,6 +3,7 @@ package com.alex.cabogame.networking
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -11,6 +12,11 @@ import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.MulticastSocket
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -20,7 +26,11 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         private set
 
     private val nsdManager by lazy { context.getSystemService(Context.NSD_SERVICE) as NsdManager }
-    private val serviceType = "_cabo-local._tcp."
+    private val wifiManager by lazy {
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    }
+    // NSD/Bonjour service type WITHOUT trailing dot (RFC 6763, Android docs).
+    private val serviceType = "_cabo-local._tcp"
     private val json = Json { classDiscriminator = "type"; ignoreUnknownKeys = true }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -30,6 +40,12 @@ class LocalLobbyService(private val context: Context) : LobbyService {
 
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
+
+    // UDP broadcast discovery fallback (more reliable across iOS/Android than NSD/Bonjour)
+    private val udpDiscoveryPort = 49888
+    private var udpDiscoverySocket: DatagramSocket? = null
+    private var udpDiscoveryJob: Job? = null
 
     private inner class PeerConnection(val socket: Socket, val name: String) {
         private val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream()))
@@ -51,6 +67,8 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         val code = makeCode()
         joinCode = code
 
+        acquireMulticastLock()
+
         val ss = ServerSocket(0)
         serverSocket = ss
 
@@ -64,6 +82,7 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         }
 
         registerNsdService(code, ss.localPort)
+        startUdpDiscoveryResponder(code, ss.localPort)
         notifyMain { delegate?.onConnectionStateChanged("Hosting with code $code") }
     }
 
@@ -108,11 +127,13 @@ class LocalLobbyService(private val context: Context) : LobbyService {
     override fun startJoining(displayName: String, code: String) {
         stop()
         joinCode = code.uppercase()
+        acquireMulticastLock()
         browseForService(displayName, code.uppercase())
         notifyMain { delegate?.onConnectionStateChanged("Searching for host...") }
     }
 
     private fun browseForService(displayName: String, code: String) {
+        val targetName = "cabo-$code"
         val listener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {}
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
@@ -120,7 +141,9 @@ class LocalLobbyService(private val context: Context) : LobbyService {
             override fun onDiscoveryStopped(serviceType: String) {}
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {}
             override fun onServiceFound(serviceInfo: NsdServiceInfo) {
-                if (serviceInfo.serviceName == "cabo-$code") {
+                val name = serviceInfo.serviceName ?: return
+                // Prefix match handles NSD collision suffixes like "cabo-XYZ (2)".
+                if (name == targetName || name.startsWith(targetName)) {
                     discoveryListener?.let { runCatching { nsdManager.stopServiceDiscovery(it) } }
                     discoveryListener = null
                     resolveAndConnect(serviceInfo, displayName)
@@ -181,7 +204,9 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         synchronized(hostConnections) { hostConnections.values.forEach { it.close() }; hostConnections.clear() }
         guestConnection?.close(); guestConnection = null
         serverSocket?.close(); serverSocket = null
+        stopUdpDiscoveryResponder()
         joinCode = null
+        releaseMulticastLock()
     }
 
     private fun registerNsdService(code: String, port: Int) {
@@ -198,6 +223,66 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         }
         registrationListener = listener
         nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
+    }
+
+    private fun startUdpDiscoveryResponder(code: String, tcpPort: Int) {
+        stopUdpDiscoveryResponder()
+        udpDiscoveryJob = scope.launch(Dispatchers.IO) {
+            val socket: MulticastSocket = try {
+                MulticastSocket(null).apply {
+                    reuseAddress = true
+                    bind(InetSocketAddress(udpDiscoveryPort))
+                    broadcast = true
+                }
+            } catch (_: Exception) {
+                return@launch
+            }
+            runCatching {
+                socket.joinGroup(InetAddress.getByName("239.255.99.99"))
+            }
+            udpDiscoverySocket = socket
+
+            val buffer = ByteArray(1024)
+            val expected = "CABO_DISCOVER:$code"
+            while (isActive && !socket.isClosed) {
+                try {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    socket.receive(packet)
+                    val received = String(packet.data, 0, packet.length, Charsets.UTF_8).trim()
+                    if (received == expected) {
+                        val reply = "CABO_HOST:$tcpPort".toByteArray(Charsets.UTF_8)
+                        socket.send(DatagramPacket(reply, reply.size, packet.address, packet.port))
+                    }
+                } catch (_: Exception) {
+                    if (socket.isClosed) break
+                }
+            }
+        }
+    }
+
+    private fun stopUdpDiscoveryResponder() {
+        runCatching { udpDiscoverySocket?.close() }
+        udpDiscoverySocket = null
+        udpDiscoveryJob?.cancel()
+        udpDiscoveryJob = null
+    }
+
+    private fun acquireMulticastLock() {
+        if (multicastLock != null) return
+        runCatching {
+            val lock = wifiManager.createMulticastLock("cabo-mdns").apply {
+                setReferenceCounted(true)
+                acquire()
+            }
+            multicastLock = lock
+        }
+    }
+
+    private fun releaseMulticastLock() {
+        multicastLock?.let {
+            runCatching { if (it.isHeld) it.release() }
+        }
+        multicastLock = null
     }
 
     private fun notifyMain(block: () -> Unit) {

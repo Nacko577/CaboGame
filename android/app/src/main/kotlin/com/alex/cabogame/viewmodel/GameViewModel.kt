@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -84,7 +85,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         if (localPlayerID == null) {
                             localPlayerID = incoming.players.firstOrNull { it.name == validatedName() }?.id
                         }
-                        if (incoming.currentPlayerID != localPlayerID) clearTurnFeedback()
+                        if (incoming.phase != TurnPhase.INITIAL_PEEK &&
+                            incoming.currentPlayerID != localPlayerID
+                        ) {
+                            clearTurnFeedback()
+                        }
                         if (incoming.phase != TurnPhase.INITIAL_PEEK) initialPeekedOwnIndices = emptySet()
                         if (incoming.winnerID != null) clearSpecialPeekFeedback()
                         handleInitialPeekGraceIfNeeded()
@@ -137,6 +142,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             gameState = engine.state
             clearTurnFeedback()
             initialPeekGraceJob?.cancel(); initialPeekGraceJob = null
+            // Host must start the countdown immediately when the game loads.
+            handleInitialPeekGraceIfNeeded()
             lobby.send(NetworkMessage.GameStateMsg(gameState))
             lobby.send(NetworkMessage.StartGame)
         } catch (e: Exception) {
@@ -226,6 +233,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun peekInitialCard(index: Int) {
         val playerID = localPlayerID ?: return
         try {
+            // iOS behavior: during INITIAL_PEEK, peeking is not restricted by "whose turn".
+            // Only enforce local remaining peeks + timer not ended.
+            if (gameState.phase != TurnPhase.INITIAL_PEEK) return
+            val graceEndsAt = gameState.initialPeekGraceEndsAt ?: return
+            if (System.currentTimeMillis() >= graceEndsAt) return
+            if (initialPeekSecondsRemaining != null && initialPeekSecondsRemaining == 0) return
+            val remaining = maxOf(0, 2 - initialPeekedOwnIndices.size)
+            if (remaining <= 0) return
+
+            val me = gameState.players.firstOrNull { it.id == playerID }
+            if (me?.hand?.getOrNull(index) == null) return
+
             if (isHostUser) {
                 engine.peekInitialCard(playerID, index)
                 initialPeekedOwnIndices = initialPeekedOwnIndices + index
@@ -339,39 +358,51 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun scheduleSpecialPeekClear() {
         specialPeekClearJob?.cancel()
         specialPeekClearJob = viewModelScope.launch {
-            delay(4_000)
+            delay(5_000)
             if (isActive) clearSpecialPeekFeedback()
         }
     }
 
     private fun handleInitialPeekGraceIfNeeded() {
         val graceEndsAt = gameState.initialPeekGraceEndsAt
-        if (gameState.phase != TurnPhase.INITIAL_PEEK ||
-            gameState.playersFinishedInitialPeek < gameState.players.size ||
-            graceEndsAt == null
-        ) {
+        if (gameState.phase != TurnPhase.INITIAL_PEEK || graceEndsAt == null) {
             initialPeekSecondsRemaining = null
             initialPeekGraceJob?.cancel(); initialPeekGraceJob = null
             return
         }
 
-        val remaining = maxOf(0, ((graceEndsAt - System.currentTimeMillis()) / 1000).toInt())
-        initialPeekSecondsRemaining = remaining
+        // Use ceil to avoid showing 0 too early (which can stall transition).
+        val now = System.currentTimeMillis()
+        initialPeekSecondsRemaining = maxOf(0, ceil((graceEndsAt - now) / 1000.0).toInt())
 
-        if (!isHostUser || initialPeekGraceJob != null) return
+        // Start a countdown loop on every client; only the host will advance game state when it hits 0.
+        if (initialPeekGraceJob != null) return
 
         initialPeekGraceJob = viewModelScope.launch {
             while (isActive) {
-                val secs = maxOf(0, ((graceEndsAt - System.currentTimeMillis()) / 1000).toInt())
-                initialPeekSecondsRemaining = secs
-                if (secs == 0) {
-                    engine.load(gameState)
-                    engine.beginMainTurnsAfterInitialPeekIfReady()
-                    gameState = engine.state
-                    lobby.send(NetworkMessage.GameStateMsg(gameState))
+                val currentEndsAt = gameState.initialPeekGraceEndsAt
+                if (gameState.phase != TurnPhase.INITIAL_PEEK || currentEndsAt == null) {
+                    initialPeekSecondsRemaining = null
                     initialPeekGraceJob = null
                     return@launch
                 }
+
+                val nowMs = System.currentTimeMillis()
+                val secs = maxOf(0, ceil((currentEndsAt - nowMs) / 1000.0).toInt())
+                initialPeekSecondsRemaining = secs
+
+                if (secs == 0) {
+                    if (isHostUser) {
+                        engine.load(gameState)
+                        // Force transition check at grace end time.
+                        engine.beginMainTurnsAfterInitialPeekIfReady(nowMillis = currentEndsAt)
+                        gameState = engine.state
+                        lobby.send(NetworkMessage.GameStateMsg(gameState))
+                    }
+                    initialPeekGraceJob = null
+                    return@launch
+                }
+
                 delay(1_000)
             }
         }

@@ -18,7 +18,8 @@ data class GameState(
     val rematchRequestedByHost: Boolean = false,
     val readyPlayerIDs: Set<String> = emptySet(),
     val hasStarted: Boolean = false,
-    val currentPlayerPeekedIndices: List<Int> = emptyList(),
+    // Initial peek tracking per player (up to 2 cards each during INITIAL_PEEK).
+    val initialPeekedIndicesByPlayerIndex: List<List<Int>> = emptyList(),
     val playersFinishedInitialPeek: Int = 0,
     val initialPeekGraceEndsAt: Long? = null  // epoch millis
 ) {

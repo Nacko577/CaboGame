@@ -46,40 +46,41 @@ class CaboGameEngine {
             rematchRequestedByHost = false,
             readyPlayerIDs = emptySet(),
             hasStarted = true,
-            currentPlayerPeekedIndices = emptyList(),
             playersFinishedInitialPeek = 0,
-            initialPeekGraceEndsAt = null
+            initialPeekedIndicesByPlayerIndex = List(players.size) { emptyList() },
+            // Start the initial peek grace timer immediately (iOS behavior).
+            initialPeekGraceEndsAt = System.currentTimeMillis() + 15_000L
         )
     }
 
     fun peekInitialCard(playerID: String, handIndex: Int): Card {
-        validateTurn(playerID)
         if (state.phase != TurnPhase.INITIAL_PEEK) throw GameRuleError("This action is not valid right now.")
 
         val playerIndex = indexOfPlayer(playerID)
         val player = state.players[playerIndex]
         if (!player.hand.indices.contains(handIndex)) throw GameRuleError("Selected card index is invalid.")
-        if (state.currentPlayerPeekedIndices.contains(handIndex)) throw GameRuleError("Selected card index is invalid.")
+
+        val alreadyPeeked = state.initialPeekedIndicesByPlayerIndex
+            .getOrNull(playerIndex)
+            ?.contains(handIndex) == true
+        if (alreadyPeeked) throw GameRuleError("Selected card index is invalid.")
 
         val card = player.hand[handIndex] ?: throw GameRuleError("Selected card index is invalid.")
 
-        val newPeeked = state.currentPlayerPeekedIndices + handIndex
-        var newState = state.copy(currentPlayerPeekedIndices = newPeeked)
+        val currentForPlayer = state.initialPeekedIndicesByPlayerIndex.getOrNull(playerIndex) ?: emptyList()
+        val updatedForPlayer = currentForPlayer + handIndex
 
-        if (newPeeked.size >= 2) {
-            val newFinished = newState.playersFinishedInitialPeek + 1
-            newState = newState.copy(playersFinishedInitialPeek = newFinished, currentPlayerPeekedIndices = emptyList())
+        val newInitialPeeked = state.initialPeekedIndicesByPlayerIndex.toMutableList().also { list ->
+            // Be defensive: older/mismatched states might have an empty list.
+            while (list.size < state.players.size) list.add(emptyList())
+            list[playerIndex] = updatedForPlayer
+        }
 
-            if (newFinished >= newState.players.size) {
-                newState = newState.copy(
-                    currentPlayerIndex = 0,
-                    initialPeekGraceEndsAt = System.currentTimeMillis() + 15_000L
-                )
-            } else {
-                newState = newState.copy(
-                    currentPlayerIndex = (newState.currentPlayerIndex + 1) % newState.players.size
-                )
-            }
+        var newState = state.copy(initialPeekedIndicesByPlayerIndex = newInitialPeeked)
+
+        // Count completion when a player reaches 2 peeked cards.
+        if (updatedForPlayer.size == 2) {
+            newState = newState.copy(playersFinishedInitialPeek = newState.playersFinishedInitialPeek + 1)
         }
 
         state = newState
@@ -88,14 +89,14 @@ class CaboGameEngine {
 
     fun beginMainTurnsAfterInitialPeekIfReady(nowMillis: Long = System.currentTimeMillis()) {
         if (state.phase != TurnPhase.INITIAL_PEEK) return
-        if (state.playersFinishedInitialPeek < state.players.size) return
         val graceEndsAt = state.initialPeekGraceEndsAt ?: return
         if (nowMillis < graceEndsAt) return
 
         state = state.copy(
             phase = TurnPhase.WAITING_FOR_DRAW,
             currentPlayerIndex = 0,
-            currentPlayerPeekedIndices = emptyList(),
+            initialPeekedIndicesByPlayerIndex = List(state.players.size) { emptyList() },
+            playersFinishedInitialPeek = 0,
             initialPeekGraceEndsAt = null
         )
     }
