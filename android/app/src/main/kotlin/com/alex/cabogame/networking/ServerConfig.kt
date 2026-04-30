@@ -11,7 +11,7 @@ package com.alex.cabogame.networking
  *    accepts it without cleartext exemptions.
  */
 object ServerConfig {
-    const val DEFAULT_PRODUCTION_URL = "wss://YOUR-CABO-RELAY.example.com/ws"
+    const val DEFAULT_PRODUCTION_URL = "wss://cabogame.onrender.com/ws"
     const val DEFAULT_LOCAL_DEV_URL = "ws://192.168.1.1:8080/ws"
 
     val current: String get() = DEFAULT_PRODUCTION_URL

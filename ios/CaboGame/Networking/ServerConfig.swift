@@ -11,7 +11,7 @@ import Foundation
 // 3) Override at runtime by setting the user-default key
 //    `cabogame.serverURL` (handy for testing without rebuilding).
 enum ServerConfig {
-    static let defaultProductionURL = URL(string: "wss://YOUR-CABO-RELAY.example.com/ws")!
+    static let defaultProductionURL = URL(string: "wss://cabogame.onrender.com/ws")!
     static let defaultLocalDevURL = URL(string: "ws://192.168.1.1:8080/ws")!
 
     static var current: URL {
