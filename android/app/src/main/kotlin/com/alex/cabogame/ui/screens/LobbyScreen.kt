@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.cabogame.viewmodel.GameViewModel
+import com.alex.cabogame.viewmodel.LobbyTransport
 
 @Composable
 fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
@@ -105,6 +107,43 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
+                )
+            }
+
+            LobbyCard(
+                title = "CONNECTION",
+                icon = Icons.Filled.Public,
+                accentColor = Color(0xFF8BBBEF)
+            ) {
+                val canSwitch = viewModel.hostedCode == null && viewModel.peers.isEmpty()
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LobbyTransport.entries.forEach { option ->
+                        val selected = viewModel.transport == option
+                        Button(
+                            onClick = { viewModel.setTransport(option) },
+                            enabled = canSwitch,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selected) Color(0xFF8BBBEF) else Color.White.copy(alpha = 0.06f),
+                                contentColor = if (selected) Color(0xFF10221A) else Color.White.copy(alpha = 0.75f),
+                                disabledContainerColor = if (selected) Color(0xFF8BBBEF).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.06f),
+                                disabledContentColor = if (selected) Color(0xFF10221A) else Color.White.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                        ) {
+                            Text(option.label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+                    }
+                }
+                Text(
+                    if (viewModel.transport == LobbyTransport.ONLINE)
+                        "Play across the internet via the relay server."
+                    else
+                        "Both players must be on the same Wi-Fi network.",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 12.sp
                 )
             }
 

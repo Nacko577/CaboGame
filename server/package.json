@@ -1,0 +1,17 @@
+{
+  "name": "cabo-relay-server",
+  "version": "1.0.0",
+  "description": "Tiny WebSocket relay so CaboGame friends can play across networks.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

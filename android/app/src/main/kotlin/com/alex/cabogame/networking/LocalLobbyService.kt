@@ -66,6 +66,7 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         stop()
         val code = makeCode()
         joinCode = code
+        notifyMain { delegate?.onJoinCodeUpdated(code) }
 
         acquireMulticastLock()
 
@@ -205,7 +206,9 @@ class LocalLobbyService(private val context: Context) : LobbyService {
         guestConnection?.close(); guestConnection = null
         serverSocket?.close(); serverSocket = null
         stopUdpDiscoveryResponder()
+        val hadCode = joinCode != null
         joinCode = null
+        if (hadCode) notifyMain { delegate?.onJoinCodeUpdated(null) }
         releaseMulticastLock()
     }
 

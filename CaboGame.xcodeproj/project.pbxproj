@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0702888A13F5484902AE4188 /* LobbyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4DBA984ED1E9BCD0EADEFEB /* LobbyService.swift */; };
 		0D1693D3B99AB696C6573CF0 /* GameTableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 876964EA2B6B10E56BFC9236 /* GameTableView.swift */; };
+		15F7343C080D3C0ED2BC6B02 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6AA062FC73F65D2719D999 /* ServerConfig.swift */; };
 		19896F722F49D248225E105F /* Card.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34376F8922F35B94F882732 /* Card.swift */; };
 		205C3B429FF87D69F6E0A376 /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D60271A487BD2E6BF39CC192 /* LobbyView.swift */; };
 		322008E9E264714581C3A42F /* MainMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D0FC81894AE3F9EFDBE249 /* MainMenuView.swift */; };
@@ -17,6 +18,8 @@
 		5C24F2575A1F801E01DCD4E2 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2E74730D8E96B08A7AD9C2 /* SplashView.swift */; };
 		78D5C1A7A12253ED48AA3E71 /* HowToPlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2D34672DD23115275F4FEC /* HowToPlayView.swift */; };
 		7EB0D903EBD8C3FFC8F1486E /* CaboAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6945144D5317CFFEF6E509B2 /* CaboAction.swift */; };
+		9C0062D9DBD1EBF465AD8F8A /* RemoteLobbyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1969F2A98E874024CC99F89F /* RemoteLobbyService.swift */; };
+		A369D645F5CC4A2DD0AB75A3 /* WireFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA2ACF83F8E4CD823605E49 /* WireFormat.swift */; };
 		C440924C418F7C07243F2C8A /* CaboGameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC59D3C6A5F167DCC275DEDE /* CaboGameApp.swift */; };
 		E31131E7F3CE544C716DB2B4 /* GameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7440B81EDDCF991027EAC795 /* GameViewModel.swift */; };
 		E4EDCEE5C716FC46084C222E /* CaboGameEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD4D4E49CBD43033061B543 /* CaboGameEngine.swift */; };
@@ -26,7 +29,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1969F2A98E874024CC99F89F /* RemoteLobbyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLobbyService.swift; sourceTree = "<group>"; };
 		28C027D1922050709502426D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4BA2ACF83F8E4CD823605E49 /* WireFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WireFormat.swift; sourceTree = "<group>"; };
 		4F1FC140D02899A60B9B382B /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
 		6945144D5317CFFEF6E509B2 /* CaboAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaboAction.swift; sourceTree = "<group>"; };
 		6DDA84B2AB82781353DF5401 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -34,6 +39,7 @@
 		876964EA2B6B10E56BFC9236 /* GameTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTableView.swift; sourceTree = "<group>"; };
 		955FF69800B5110AA69FB957 /* CaboGame.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CaboGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A34376F8922F35B94F882732 /* Card.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Card.swift; sourceTree = "<group>"; };
+		BB6AA062FC73F65D2719D999 /* ServerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfig.swift; sourceTree = "<group>"; };
 		BC59D3C6A5F167DCC275DEDE /* CaboGameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaboGameApp.swift; sourceTree = "<group>"; };
 		BF2E74730D8E96B08A7AD9C2 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		C8D0FC81894AE3F9EFDBE249 /* MainMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainMenuView.swift; sourceTree = "<group>"; };
@@ -87,6 +93,9 @@
 			children = (
 				E4DBA984ED1E9BCD0EADEFEB /* LobbyService.swift */,
 				EE0BE41EE5D5A872F84D4493 /* LocalLobbyService.swift */,
+				1969F2A98E874024CC99F89F /* RemoteLobbyService.swift */,
+				BB6AA062FC73F65D2719D999 /* ServerConfig.swift */,
+				4BA2ACF83F8E4CD823605E49 /* WireFormat.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -210,8 +219,11 @@
 				E839A1CDC3A9806372AE4EA3 /* LocalLobbyService.swift in Sources */,
 				322008E9E264714581C3A42F /* MainMenuView.swift in Sources */,
 				4EAD08CBE0700FCEBAFD4B40 /* Player.swift in Sources */,
+				9C0062D9DBD1EBF465AD8F8A /* RemoteLobbyService.swift in Sources */,
 				FFE409800EC149E30BF97EF7 /* RootView.swift in Sources */,
+				15F7343C080D3C0ED2BC6B02 /* ServerConfig.swift in Sources */,
 				5C24F2575A1F801E01DCD4E2 /* SplashView.swift in Sources */,
+				A369D645F5CC4A2DD0AB75A3 /* WireFormat.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -15,6 +15,11 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
+enum class LobbyTransport(val label: String) {
+    ONLINE("Online"),
+    LOCAL("Same Wi-Fi")
+}
+
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     var playerName by mutableStateOf("")
@@ -26,6 +31,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     var localPlayerID by mutableStateOf<String?>(null)
         private set
     var hostedCode by mutableStateOf<String?>(null)
+        private set
+    var transport by mutableStateOf(LobbyTransport.ONLINE)
         private set
     var gameState by mutableStateOf(GameState())
         private set
@@ -52,73 +59,101 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     var lastError by mutableStateOf<String?>(null)
         private set
 
-    private val lobby: LobbyService = LocalLobbyService(application)
+    private var lobby: LobbyService = RemoteLobbyService()
     private var engine = CaboGameEngine()
     private var initialPeekGraceJob: Job? = null
     private var specialPeekClearJob: Job? = null
+    private var pendingHostStart: Boolean = false
 
     val isHostUser: Boolean get() = hostedCode != null
     val isLocalPlayerReadyForNewGame: Boolean get() =
         localPlayerID?.let { gameState.readyPlayerIDs.contains(it) } ?: false
 
-    init {
-        lobby.delegate = object : LobbyServiceDelegate {
-            override fun onPeersUpdated(peers: List<LobbyPeer>) {
-                this@GameViewModel.peers = peers
-                if (hostedCode != null) {
-                    for (peer in peers) {
-                        if (engine.state.players.none { it.name == peer.displayName }) {
-                            addRemotePlayer(peer.displayName)
-                        }
+    private val lobbyDelegate = object : LobbyServiceDelegate {
+        override fun onPeersUpdated(peers: List<LobbyPeer>) {
+            this@GameViewModel.peers = peers
+            if (hostedCode != null) {
+                for (peer in peers) {
+                    if (engine.state.players.none { it.name == peer.displayName }) {
+                        addRemotePlayer(peer.displayName)
                     }
-                    gameState = engine.state
                 }
+                gameState = engine.state
             }
+        }
 
-            override fun onMessageReceived(message: NetworkMessage, from: String) {
-                when (message) {
-                    is NetworkMessage.LobbyState -> Unit
-                    is NetworkMessage.GameStateMsg -> {
-                        val incoming = message.state
-                        gameState = incoming
-                        engine.load(incoming)
-                        if (localPlayerID == null) {
-                            localPlayerID = incoming.players.firstOrNull { it.name == validatedName() }?.id
-                        }
-                        if (incoming.phase != TurnPhase.INITIAL_PEEK &&
-                            incoming.currentPlayerID != localPlayerID
-                        ) {
-                            clearTurnFeedback()
-                        }
-                        if (incoming.phase != TurnPhase.INITIAL_PEEK) initialPeekedOwnIndices = emptySet()
-                        if (incoming.winnerID != null) clearSpecialPeekFeedback()
-                        handleInitialPeekGraceIfNeeded()
+        override fun onMessageReceived(message: NetworkMessage, from: String) {
+            when (message) {
+                is NetworkMessage.LobbyState -> Unit
+                is NetworkMessage.GameStateMsg -> {
+                    val incoming = message.state
+                    gameState = incoming
+                    engine.load(incoming)
+                    if (localPlayerID == null) {
+                        localPlayerID = incoming.players.firstOrNull { it.name == validatedName() }?.id
                     }
-                    is NetworkMessage.PlayerActionMsg -> {
-                        if (isHostUser) {
-                            try {
-                                applyActionAsHost(message.action)
-                                handleInitialPeekGraceIfNeeded()
-                            } catch (e: Exception) {
-                                lastError = e.message
-                            }
-                        }
+                    if (incoming.phase != TurnPhase.INITIAL_PEEK &&
+                        incoming.currentPlayerID != localPlayerID
+                    ) {
+                        clearTurnFeedback()
                     }
-                    is NetworkMessage.StartGame -> statusText = "Game started"
+                    if (incoming.phase != TurnPhase.INITIAL_PEEK) initialPeekedOwnIndices = emptySet()
+                    if (incoming.winnerID != null) clearSpecialPeekFeedback()
+                    handleInitialPeekGraceIfNeeded()
                 }
+                is NetworkMessage.PlayerActionMsg -> {
+                    if (isHostUser) {
+                        try {
+                            applyActionAsHost(message.action)
+                            handleInitialPeekGraceIfNeeded()
+                        } catch (e: Exception) {
+                            lastError = e.message
+                        }
+                    }
+                }
+                is NetworkMessage.StartGame -> statusText = "Game started"
             }
+        }
 
-            override fun onConnectionStateChanged(text: String) {
-                statusText = text
+        override fun onConnectionStateChanged(text: String) {
+            statusText = text
+        }
+
+        override fun onJoinCodeUpdated(code: String?) {
+            hostedCode = code
+            if (code != null && pendingHostStart) {
+                pendingHostStart = false
+                resetForLobbyAsHost()
+                statusText = "Lobby hosted"
             }
         }
     }
 
+    init {
+        lobby.delegate = lobbyDelegate
+    }
+
+    fun setTransport(next: LobbyTransport) {
+        if (next == transport) return
+        leaveLobby()
+        lobby.delegate = null
+        transport = next
+        installLobbyService(next)
+    }
+
+    private fun installLobbyService(next: LobbyTransport) {
+        val app = getApplication<Application>()
+        lobby = when (next) {
+            LobbyTransport.ONLINE -> RemoteLobbyService()
+            LobbyTransport.LOCAL -> LocalLobbyService(app)
+        }
+        lobby.delegate = lobbyDelegate
+    }
+
     fun hostLobby() {
+        pendingHostStart = true
         lobby.startHosting(validatedName())
-        hostedCode = lobby.joinCode
-        statusText = "Lobby hosted"
-        resetForLobbyAsHost()
+        statusText = "Creating lobby..."
     }
 
     fun joinLobby() {
@@ -133,6 +168,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         specialPeekClearJob?.cancel(); specialPeekClearJob = null
         peers = emptyList()
         hostedCode = null
+        pendingHostStart = false
         gameState = GameState()
     }
 

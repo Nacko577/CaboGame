@@ -1,5 +1,18 @@
 import Foundation
 
+enum LobbyTransport: String, CaseIterable, Identifiable {
+    case online
+    case local
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .online: return "Online"
+        case .local: return "Same Wi-Fi"
+        }
+    }
+}
+
 @MainActor
 final class GameViewModel: ObservableObject {
     @Published var playerName: String = ""
@@ -8,6 +21,7 @@ final class GameViewModel: ObservableObject {
     @Published var peers: [LobbyPeer] = []
     @Published var localPlayerID: UUID?
     @Published var hostedCode: String?
+    @Published var transport: LobbyTransport = .online
     @Published var gameState = GameState()
     @Published var initialPeekedOwnIndices: Set<Int> = []
     @Published var jackPeekedOwnIndex: Int?
@@ -25,19 +39,39 @@ final class GameViewModel: ObservableObject {
     private var engine = CaboGameEngine()
     private var initialPeekGraceTask: Task<Void, Never>?
     private var specialPeekClearTask: Task<Void, Never>?
+    private var pendingHostStart: Bool = false
 
-    init(lobby: LobbyService = LocalLobbyService()) {
-        self.lobby = lobby
+    init(lobby: LobbyService? = nil) {
+        let initial: LobbyService = lobby ?? RemoteLobbyService()
+        self.lobby = initial
         self.lobby.delegate = self
+    }
+
+    func setTransport(_ next: LobbyTransport) {
+        guard next != transport else { return }
+        leaveLobby()
+        lobby.delegate = nil
+        transport = next
+        installLobbyService(for: next)
+    }
+
+    private func installLobbyService(for transport: LobbyTransport) {
+        var new: LobbyService
+        switch transport {
+        case .online: new = RemoteLobbyService()
+        case .local: new = LocalLobbyService()
+        }
+        new.delegate = self
+        lobby = new
     }
 
     func hostLobby() {
         do {
+            pendingHostStart = true
             try lobby.startHosting(displayName: validatedName())
-            hostedCode = lobby.joinCode
-            statusText = "Lobby hosted"
-            resetForLobbyAsHost()
+            statusText = "Creating lobby..."
         } catch {
+            pendingHostStart = false
             lastError = error.localizedDescription
         }
     }
@@ -60,6 +94,7 @@ final class GameViewModel: ObservableObject {
         specialPeekClearTask = nil
         peers = []
         hostedCode = nil
+        pendingHostStart = false
         gameState = GameState()
     }
 
@@ -487,6 +522,17 @@ extension GameViewModel: LobbyServiceDelegate {
     nonisolated func lobbyServiceDidChangeConnectionState(_ text: String) {
         Task { @MainActor in
             self.statusText = text
+        }
+    }
+
+    nonisolated func lobbyServiceDidUpdateJoinCode(_ code: String?) {
+        Task { @MainActor in
+            self.hostedCode = code
+            if code != nil, self.pendingHostStart {
+                self.pendingHostStart = false
+                self.resetForLobbyAsHost()
+                self.statusText = "Lobby hosted"
+            }
         }
     }
 }

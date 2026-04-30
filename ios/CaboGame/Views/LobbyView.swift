@@ -73,6 +73,41 @@ struct LobbyView: View {
                                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
                             )
                     }
+
+                    // Transport Card (Online vs Same Wi-Fi)
+                    LobbyCard(icon: "network", title: "Connection", accentColor: Color(red: 0.55, green: 0.75, blue: 0.95)) {
+                        HStack(spacing: 8) {
+                            ForEach(LobbyTransport.allCases) { option in
+                                Button {
+                                    viewModel.setTransport(option)
+                                } label: {
+                                    Text(option.label)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                        .foregroundColor(viewModel.transport == option ? Color(red: 0.06, green: 0.10, blue: 0.08) : .white.opacity(0.75))
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 40)
+                                        .background(
+                                            viewModel.transport == option ?
+                                            AnyShapeStyle(Color(red: 0.55, green: 0.75, blue: 0.95)) :
+                                            AnyShapeStyle(Color.white.opacity(0.06))
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .stroke(Color.white.opacity(viewModel.transport == option ? 0 : 0.1), lineWidth: 1)
+                                        )
+                                }
+                                .buttonStyle(ScaleButtonStyle())
+                                .disabled(viewModel.hostedCode != nil || !viewModel.peers.isEmpty)
+                            }
+                        }
+
+                        Text(viewModel.transport == .online
+                             ? "Play across the internet via the relay server."
+                             : "Both players must be on the same Wi-Fi network.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.4))
+                    }
                     
                     // Host or Join Section
                     HStack(spacing: 12) {

@@ -10,6 +10,13 @@ interface LobbyServiceDelegate {
     fun onPeersUpdated(peers: List<LobbyPeer>)
     fun onMessageReceived(message: NetworkMessage, from: String)
     fun onConnectionStateChanged(text: String)
+    /**
+     * Called when the join code becomes available (synchronously for the
+     * local service, asynchronously for the remote service after the server
+     * confirms the lobby was created). Pass `null` to signal that no lobby is
+     * currently being hosted.
+     */
+    fun onJoinCodeUpdated(code: String?) {}
 }
 
 interface LobbyService {

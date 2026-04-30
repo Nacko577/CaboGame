@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cabo-relay
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080

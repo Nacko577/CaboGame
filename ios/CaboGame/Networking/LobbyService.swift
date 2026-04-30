@@ -33,6 +33,14 @@ protocol LobbyServiceDelegate: AnyObject {
     func lobbyServiceDidUpdatePeers(_ peers: [LobbyPeer])
     func lobbyServiceDidReceive(message: NetworkMessage, from peerID: String)
     func lobbyServiceDidChangeConnectionState(_ text: String)
+    /// Called when the join code becomes available (synchronously for the
+    /// local service, asynchronously for the remote service after the server
+    /// confirms the lobby was created).
+    func lobbyServiceDidUpdateJoinCode(_ code: String?)
+}
+
+extension LobbyServiceDelegate {
+    func lobbyServiceDidUpdateJoinCode(_ code: String?) {}
 }
 
 protocol LobbyService {
