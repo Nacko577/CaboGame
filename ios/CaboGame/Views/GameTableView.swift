@@ -28,6 +28,7 @@ struct GameTableView: View {
                 VStack(spacing: 6) {
                     header
                     topPillsRow
+                    matchResultBanner
                     tableArea(opW: opW, opH: opH, myW: myW, myH: myH, compact: compact, width: geo.size.width, height: geo.size.height)
                     statusBanner
                     controls(compact: compact)
@@ -104,14 +105,30 @@ struct GameTableView: View {
         }
     }
 
+    private var turnTimerPill: some View {
+        Group {
+            if let secs = viewModel.currentTurnSecondsRemaining,
+               viewModel.gameState.winnerID == nil,
+               viewModel.gameState.phase != .initialPeek {
+                // Tint red when time is running out so the warning is obvious.
+                let color: Color = secs <= 5 ? Color(red: 0.95, green: 0.30, blue: 0.30) : accentGold
+                topPill("\(secs)s", color: color)
+            }
+        }
+    }
+
     private var topPillsRow: some View {
         HStack(spacing: 8) {
-            if viewModel.gameState.phase == .initialPeek {
+            if viewModel.gameState.winnerID != nil {
+                // Game is over; the round-result banner takes over.
+                EmptyView()
+            } else if viewModel.gameState.phase == .initialPeek {
                 turnPill
                 peekProgressPill
                 peekTimerPill
             } else {
                 turnPill
+                turnTimerPill
             }
         }
         .padding(.horizontal, 2)
@@ -143,6 +160,8 @@ struct GameTableView: View {
 
         let padX = boardW * 0.08
         let padY = boardH * 0.10
+        // Extra inset so E/W seats (especially the card column) aren’t flush with the table rim.
+        let sideSeatInset = max(20, seatCardH * 0.18)
 
         return ZStack {
             RoundedRectangle(cornerRadius: 24)
@@ -153,35 +172,40 @@ struct GameTableView: View {
             // Center piles.
             centerPiles(compact: compact, pileW: max(28, seatCardW * 1.6))
 
-            // N
-            seatView(player: north, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH)
+            // N — cards toward top edge, name below toward center
+            seatView(player: north, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .north)
                 .position(x: boardW / 2, y: padY)
-            // S (local)
-            seatView(player: south, isLocal: true, seatCardW: seatCardW, seatCardH: seatCardH)
+            // S (local) — name toward center, cards toward bottom edge
+            seatView(player: south, isLocal: true, seatCardW: seatCardW, seatCardH: seatCardH, position: .south)
                 .position(x: boardW / 2, y: boardH - padY)
-            // E
-            seatView(
-                player: east,
-                isLocal: false,
-                seatCardW: seatCardW,
-                seatCardH: seatCardH,
-                cardsRotation: .degrees(90),
-                isSideSeat: true
-            )
-                .position(x: boardW - padX, y: boardH / 2)
-            // W
-            seatView(
-                player: west,
-                isLocal: false,
-                seatCardW: seatCardW,
-                seatCardH: seatCardH,
-                cardsRotation: .degrees(-90),
-                isSideSeat: true
-            )
-                .position(x: padX, y: boardH / 2)
+            // E — inset from right rim; landscape stack + perpendicular symbols; name +180° from prior 90°
+            seatView(player: east, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .east)
+                .position(x: boardW - padX - sideSeatInset, y: boardH / 2)
+            // W — inset from left rim
+            seatView(player: west, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .west)
+                .position(x: padX + sideSeatInset, y: boardH / 2)
         }
         .frame(width: boardW, height: boardH)
         .padding(.top, compact ? 2 : 6)
+    }
+
+    private enum TableSeatPosition {
+        /// Top: horizontal row of portrait cards; name below (toward table center).
+        case north
+        /// Bottom: name above row (toward center); portrait cards below toward edge.
+        case south
+        /// Right edge: name left of a vertical column of portrait cards (name toward center).
+        case east
+        /// Left edge: vertical column of portrait cards; name right of column (toward center).
+        case west
+    }
+
+    private enum SideSeatEdge {
+        /// N/S: portrait cards in a row; rank/suit axis matches the card shape.
+        case none
+        /// Right edge: landscape stack; rotate face symbols so they’re perpendicular to the felt.
+        case east
+        case west
     }
 
     private func seatView(
@@ -189,55 +213,52 @@ struct GameTableView: View {
         isLocal: Bool,
         seatCardW: CGFloat,
         seatCardH: CGFloat,
-        cardsRotation: Angle = .zero,
-        isSideSeat: Bool = false
+        position: TableSeatPosition
     ) -> some View {
-        VStack(spacing: 4) {
+        return Group {
             if let player {
-                Text(isLocal ? "You" : resolvedDisplayName(for: player))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(
-                        isLocal
-                        ? accentGold
-                        : (viewModel.gameState.currentPlayerID == player.id ? accentGreen : .white)
-                    )
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-
                 let indices = Array(player.hand.indices.prefix(4))
+                let nameLabel = seatNameLabel(isLocal: isLocal, player: player)
 
-                HStack(spacing: 2) {
-                    ForEach(indices, id: \.self) { idx in
-                        let card = player.hand[idx]
-                        let revealedBase = isLocal ? shouldRevealOwnCard(at: idx) : shouldRevealOpponentCard(playerID: player.id, at: idx)
-                        let revealed = revealedBase || viewModel.gameState.winnerID != nil
-
-                        cardView(
-                            text: card?.shortName ?? "",
-                            isFaceUp: card != nil && revealed,
-                            isEmpty: card == nil,
-                            isSelected: isLocal
-                                ? (idx == selectedOwnIndex)
-                                : (selectedOpponentID == player.id && selectedOpponentIndex == idx),
-                            width: seatCardW,
-                            height: seatCardH
-                        )
-                        .onTapGesture {
-                            if isLocal {
-                                selectedOwnIndex = idx
-                            } else {
-                                selectedOpponentID = player.id
-                                selectedOpponentIndex = idx
+                switch position {
+                case .north:
+                    VStack(spacing: 4) {
+                        HStack(spacing: 2) {
+                            ForEach(indices, id: \.self) { idx in
+                                sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .none)
                             }
                         }
-                        .onTapGesture(count: 2) {
-                            if isLocal {
-                                tryPeekOwnCard(at: idx)
+                        nameLabel
+                    }
+                case .south:
+                    VStack(spacing: 4) {
+                        nameLabel
+                        HStack(spacing: 2) {
+                            ForEach(indices, id: \.self) { idx in
+                                sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .none)
                             }
                         }
                     }
+                case .east:
+                    // Name at 270° (prior 90° + 180°). Symbols on landscape cards run perpendicular to the felt.
+                    HStack(alignment: .center, spacing: 4) {
+                        nameLabel.rotationEffect(.degrees(270))
+                        VStack(spacing: 2) {
+                            ForEach(indices, id: \.self) { idx in
+                                sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .east)
+                            }
+                        }
+                    }
+                case .west:
+                    HStack(alignment: .center, spacing: 4) {
+                        VStack(spacing: 2) {
+                            ForEach(indices, id: \.self) { idx in
+                                sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .west)
+                            }
+                        }
+                        nameLabel.rotationEffect(.degrees(90))
+                    }
                 }
-                .rotationEffect(cardsRotation)
             } else {
                 Text("Empty")
                     .font(.system(size: 9, weight: .semibold))
@@ -248,10 +269,81 @@ struct GameTableView: View {
                     .clipShape(Capsule())
             }
         }
-        .frame(
-            width: isSideSeat ? (seatCardH + 24) : (seatCardW * 4 + 14),
-            height: isSideSeat ? (seatCardW * 4 + 14) : (seatCardH + 24)
+        .frame(width: frameWidth(for: position, seatCardW: seatCardW, seatCardH: seatCardH),
+               height: frameHeight(for: position, seatCardW: seatCardW, seatCardH: seatCardH))
+    }
+
+    private func frameWidth(for position: TableSeatPosition, seatCardW: CGFloat, seatCardH: CGFloat) -> CGFloat {
+        switch position {
+        case .north, .south:
+            return seatCardW * 4 + 14
+        case .east, .west:
+            // Rotated name + horizontal card column (landscape cards; long edge toward center)
+            return seatCardH + 36
+        }
+    }
+
+    private func frameHeight(for position: TableSeatPosition, seatCardW: CGFloat, seatCardH: CGFloat) -> CGFloat {
+        switch position {
+        case .north, .south:
+            return seatCardH + 4 + 14 // card row + spacing + name
+        case .east, .west:
+            // Stack short edge (seatCardW) vertically
+            return seatCardW * 4 + 6
+        }
+    }
+
+    @ViewBuilder
+    private func seatNameLabel(isLocal: Bool, player: Player) -> some View {
+        Text(isLocal ? "You" : resolvedDisplayName(for: player))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(
+                isLocal
+                    ? accentGold
+                    : (viewModel.gameState.currentPlayerID == player.id ? accentGreen : .white)
+            )
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    private func sideSeatCard(idx: Int, player: Player, isLocal: Bool, seatCardW: CGFloat, seatCardH: CGFloat, edge: SideSeatEdge) -> some View {
+        let card = player.hand[idx]
+        let revealedBase = isLocal ? shouldRevealOwnCard(at: idx) : shouldRevealOpponentCard(playerID: player.id, at: idx)
+        let revealed = revealedBase || viewModel.gameState.winnerID != nil
+        let edgeLandscape = edge != .none
+        let w = edgeLandscape ? seatCardH : seatCardW
+        let h = edgeLandscape ? seatCardW : seatCardH
+        let faceTextRotation: Angle
+        switch edge {
+        case .none: faceTextRotation = .zero
+        case .east: faceTextRotation = .degrees(-90)
+        case .west: faceTextRotation = .degrees(90)
+        }
+
+        return cardView(
+            text: card?.shortName ?? "",
+            isFaceUp: card != nil && revealed,
+            isEmpty: card == nil,
+            isSelected: isLocal
+                ? (idx == selectedOwnIndex)
+                : (selectedOpponentID == player.id && selectedOpponentIndex == idx),
+            width: w,
+            height: h,
+            faceTextRotation: faceTextRotation
         )
+        .onTapGesture {
+            if isLocal {
+                selectedOwnIndex = idx
+            } else {
+                selectedOpponentID = player.id
+                selectedOpponentIndex = idx
+            }
+        }
+        .onTapGesture(count: 2) {
+            if isLocal {
+                tryPeekOwnCard(at: idx)
+            }
+        }
     }
 
     private func topOpponents(opW: CGFloat, opH: CGFloat) -> some View {
@@ -366,10 +458,22 @@ struct GameTableView: View {
             } else if let callerID = viewModel.gameState.caboCallerID,
                       let caller = viewModel.gameState.players.first(where: { $0.id == callerID }) {
                 statusPill("Cabo! \(caller.name) - Final turns", color: .orange)
-            } else if let matchStatus = viewModel.matchDiscardStatusText {
-                statusPill(matchStatus, color: .orange)
-            } else if viewModel.gameState.phase == .waitingForSpecialResolution {
+            } else if viewModel.gameState.phase == .waitingForSpecialResolution && isMyTurn {
+                // Only the player resolving the special should see the
+                // explanation text; opponents shouldn't be told what the
+                // active card is.
                 statusPill(powerTextForSpecial(), color: accentGreen)
+            } else {
+                EmptyView()
+            }
+        }
+    }
+
+    private var matchResultBanner: some View {
+        Group {
+            if let matchStatus = viewModel.matchDiscardStatusText {
+                let isCorrect = matchStatus.lowercased().hasPrefix("correct")
+                statusPill(matchStatus, color: isCorrect ? accentGreen : .red)
             } else {
                 EmptyView()
             }
@@ -380,11 +484,11 @@ struct GameTableView: View {
         guard let rank = activeSpecialRank else { return "Resolve power" }
         switch rank {
         case .king:
-            return "K: swap one of your cards with any opponents card"
+            return "K: Swap one of your cards with any opponents card"
         case .jack:
-            return "J: peek at one of your cards"
+            return "J: Peek at one of your cards"
         case .queen:
-            return "Q: peek at one of any opponents card"
+            return "Q: Peek at one of any opponents card"
         default:
             return "\(rank.display): resolve power"
         }
@@ -415,7 +519,7 @@ struct GameTableView: View {
                     HStack(spacing: 6) {
                         action("Replace", primary: true, h: h, fs: fs) { viewModel.replaceWithDrawnCard(at: selectedOwnIndex) }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForPlacementOrDiscard)
                         action("Discard", primary: false, h: h, fs: fs) { viewModel.discardForEffect() }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForPlacementOrDiscard)
-                        action("Cabo!", primary: false, h: h, fs: fs, accent: accentGold) { viewModel.callCabo() }.disabled(!isMyTurn || viewModel.gameState.phase == .initialPeek || viewModel.gameState.caboCallerID != nil)
+                        action("Cabo!", primary: false, h: h, fs: fs, accent: accentGold) { viewModel.callCabo() }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForDraw || viewModel.gameState.pendingDraw != nil || viewModel.gameState.caboCallerID != nil)
                     }
                 }
             }
@@ -487,7 +591,7 @@ struct GameTableView: View {
         }.buttonStyle(.plain)
     }
 
-    private func cardView(text: String, isFaceUp: Bool, isEmpty: Bool, isSelected: Bool, width: CGFloat, height: CGFloat) -> some View {
+    private func cardView(text: String, isFaceUp: Bool, isEmpty: Bool, isSelected: Bool, width: CGFloat, height: CGFloat, faceTextRotation: Angle = .zero) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5).fill(isEmpty ? Color.white.opacity(0.05) : (isFaceUp ? .white : cardBack))
             RoundedRectangle(cornerRadius: 5).stroke(isSelected ? accentGold : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 0.8)
@@ -499,8 +603,9 @@ struct GameTableView: View {
                     Text(cardSuit(from: text))
                 }
                 .lineLimit(1).minimumScaleFactor(0.7)
-                .font(.system(size: width > 44 ? 14 : 10, weight: .bold))
+                .font(.system(size: width > 44 ? (height <= 34 ? 11 : 14) : 10, weight: .bold))
                 .foregroundColor(cardColor(text))
+                .rotationEffect(faceTextRotation)
             }
         }.frame(width: width, height: height)
     }

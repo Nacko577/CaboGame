@@ -5,6 +5,11 @@ import com.alex.cabogame.models.*
 class GameRuleError(message: String) : Exception(message)
 
 class CaboGameEngine {
+    companion object {
+        /** Maximum length of a single player turn after the initial peek phase. */
+        const val TURN_TIMEOUT_MILLIS: Long = 20_000L
+    }
+
     var state: GameState = GameState()
         private set
 
@@ -49,7 +54,8 @@ class CaboGameEngine {
             playersFinishedInitialPeek = 0,
             initialPeekedIndicesByPlayerIndex = List(players.size) { emptyList() },
             // Start the initial peek grace timer immediately (iOS behavior).
-            initialPeekGraceEndsAt = System.currentTimeMillis() + 15_000L
+            initialPeekGraceEndsAt = System.currentTimeMillis() + 15_000L,
+            currentTurnEndsAt = null
         )
     }
 
@@ -97,8 +103,43 @@ class CaboGameEngine {
             currentPlayerIndex = 0,
             initialPeekedIndicesByPlayerIndex = List(state.players.size) { emptyList() },
             playersFinishedInitialPeek = 0,
-            initialPeekGraceEndsAt = null
+            initialPeekGraceEndsAt = null,
+            currentTurnEndsAt = nowMillis + TURN_TIMEOUT_MILLIS
         )
+    }
+
+    /**
+     * Forces the current player's turn to end because the per-turn timer
+     * expired. Behavior depends on the phase the player got stuck in:
+     *  - WAITING_FOR_DRAW: skip the turn outright.
+     *  - WAITING_FOR_PLACEMENT_OR_DISCARD: discard the pending drawn card without
+     *    applying its effect, then advance.
+     *  - WAITING_FOR_SPECIAL_RESOLUTION: forfeit the J/Q/K effect (the card is
+     *    already on the discard pile), advance.
+     * Returns true if a turn was actually ended, false if there was nothing
+     * to do (e.g. game over or initial peek phase).
+     */
+    fun enforceTurnTimeoutIfNeeded(nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (state.winnerID != null) return false
+        if (state.phase == TurnPhase.INITIAL_PEEK) return false
+        val deadline = state.currentTurnEndsAt ?: return false
+        if (nowMillis < deadline) return false
+
+        if (state.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD) {
+            val pending = state.pendingDraw
+            if (pending != null) {
+                state = state.copy(
+                    discardPile = state.discardPile + pending.card,
+                    pendingDraw = null
+                )
+            }
+        } else if (state.phase == TurnPhase.WAITING_FOR_SPECIAL_RESOLUTION) {
+            // The J/Q/K is already on the discard pile from the prior
+            // discardForEffect step; we just forfeit the effect.
+            state = state.copy(pendingDraw = null)
+        }
+        endTurn(nowMillis)
+        return true
     }
 
     fun attemptMatchDiscard(playerID: String, handIndex: Int): Boolean {
@@ -119,10 +160,26 @@ class CaboGameEngine {
             state = state.copy(players = newPlayers, discardPile = state.discardPile + selected)
             true
         } else {
-            val newPlayers = state.players.toMutableList().also {
-                it[playerIndex] = player.copy(roundsToSkip = player.roundsToSkip + 1)
+            // Failed match: end the matcher's *current* turn if it is theirs;
+            // otherwise (an off-turn match attempt) make them sit out their next
+            // full turn.
+            if (state.currentPlayerIndex == playerIndex) {
+                // Discard any pending drawn card (without applying its effect)
+                // so deck/discard counts stay consistent before advancing turn.
+                val pending = state.pendingDraw
+                if (pending != null) {
+                    state = state.copy(
+                        discardPile = state.discardPile + pending.card,
+                        pendingDraw = null
+                    )
+                }
+                endTurn()
+            } else {
+                val newPlayers = state.players.toMutableList().also {
+                    it[playerIndex] = player.copy(roundsToSkip = player.roundsToSkip + 1)
+                }
+                state = state.copy(players = newPlayers)
             }
-            state = state.copy(players = newPlayers)
             false
         }
     }
@@ -235,6 +292,7 @@ class CaboGameEngine {
     fun callCabo(playerID: String) {
         validateTurn(playerID)
         if (state.phase != TurnPhase.WAITING_FOR_DRAW) throw GameRuleError("This action is not valid right now.")
+        if (state.pendingDraw != null) throw GameRuleError("This action is not valid right now.")
         if (state.caboCallerID != null) throw GameRuleError("Cabo has already been called this round.")
         state = state.copy(caboCallerID = playerID)
         endTurn()
@@ -254,7 +312,7 @@ class CaboGameEngine {
         state = state.copy(deck = state.discardPile.dropLast(1).shuffled(), discardPile = listOf(keepTop))
     }
 
-    private fun endTurn() {
+    private fun endTurn(nowMillis: Long = System.currentTimeMillis()) {
         var next = state.currentPlayerIndex
         var safety = state.players.size
         val players = state.players.toMutableList()
@@ -273,7 +331,11 @@ class CaboGameEngine {
 
         if (state.caboCallerID != null && state.players[next].id == state.caboCallerID) {
             finishRound()
+            return
         }
+
+        // Reset the turn timer for the new active player.
+        state = state.copy(currentTurnEndsAt = nowMillis + TURN_TIMEOUT_MILLIS)
     }
 
     private fun finishRound() {
@@ -282,7 +344,8 @@ class CaboGameEngine {
             winnerID = winner?.id,
             caboCallerID = null,
             phase = TurnPhase.WAITING_FOR_DRAW,
-            pendingDraw = null
+            pendingDraw = null,
+            currentTurnEndsAt = null
         )
     }
 

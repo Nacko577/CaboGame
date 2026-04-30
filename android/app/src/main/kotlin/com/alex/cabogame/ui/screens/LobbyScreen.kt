@@ -92,6 +92,7 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                 icon = Icons.Filled.Person,
                 accentColor = Color(0xFF2EC08C)
             ) {
+                val nameLocked = viewModel.hostedCode != null || viewModel.peers.isNotEmpty()
                 OutlinedTextField(
                     value = viewModel.playerName,
                     onValueChange = { viewModel.playerName = it },
@@ -100,13 +101,17 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
+                        disabledTextColor = Color.White.copy(alpha = 0.5f),
                         focusedContainerColor = Color.White.copy(alpha = 0.12f),
                         unfocusedContainerColor = Color.White.copy(alpha = 0.12f),
+                        disabledContainerColor = Color.White.copy(alpha = 0.08f),
                         focusedBorderColor = Color.White.copy(alpha = 0.4f),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f)
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                        disabledBorderColor = Color.White.copy(alpha = 0.15f)
                     ),
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    singleLine = true,
+                    enabled = !nameLocked
                 )
             }
 
@@ -120,7 +125,7 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                     LobbyTransport.entries.forEach { option ->
                         val selected = viewModel.transport == option
                         Button(
-                            onClick = { viewModel.setTransport(option) },
+                            onClick = { viewModel.switchTransport(option) },
                             enabled = canSwitch,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -175,9 +180,10 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                         singleLine = true,
                         enabled = false
                     )
+                    val canHost = viewModel.hostedCode == null && viewModel.playerName.trim().isNotEmpty()
                     Button(
                         onClick = { viewModel.hostLobby() },
-                        enabled = viewModel.hostedCode == null,
+                        enabled = canHost,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
@@ -234,8 +240,12 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
+                    val canJoin = viewModel.playerName.trim().isNotEmpty() &&
+                        viewModel.joinCodeInput.trim().isNotEmpty() &&
+                        viewModel.hostedCode == null
                     OutlinedButton(
                         onClick = { viewModel.joinLobby() },
+                        enabled = canJoin,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = Color(0xFF8BBBEF).copy(alpha = 0.22f),

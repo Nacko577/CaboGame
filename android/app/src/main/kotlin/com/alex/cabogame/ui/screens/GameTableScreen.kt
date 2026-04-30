@@ -1,8 +1,11 @@
 package com.alex.cabogame.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
@@ -20,8 +24,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.cabogame.models.*
@@ -29,6 +33,9 @@ import com.alex.cabogame.ui.theme.CardBack
 import com.alex.cabogame.ui.theme.GreenDark
 import com.alex.cabogame.ui.theme.GreenDeep
 import com.alex.cabogame.viewmodel.GameViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlin.math.ceil
 
 @Composable
 fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
@@ -52,10 +59,36 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     else null
 
     val specialPowerText: String? = when (activeSpecialRank) {
-        Rank.KING -> "K: swap one of your cards with any opponents card"
-        Rank.JACK -> "J: peek at one of your cards"
-        Rank.QUEEN -> "Q: peek at one of any opponents card"
+        Rank.KING -> "K: Swap one of your cards with any opponents card"
+        Rank.JACK -> "J: Peek at one of your cards"
+        Rank.QUEEN -> "Q: Peek at one of any opponents card"
         else -> null
+    }
+
+    // Turn countdown is driven from authoritative [GameState.currentTurnEndsAt]
+    // so it always renders on Android even if the ViewModel ticker misses a
+    // snapshot update (Compose + state timing edge cases with nested jobs).
+    var displayTurnSecs by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(gameState.currentTurnEndsAt, gameState.phase, gameState.winnerID) {
+        if (gameState.winnerID != null ||
+            gameState.phase == TurnPhase.INITIAL_PEEK ||
+            gameState.currentTurnEndsAt == null
+        ) {
+            displayTurnSecs = -1
+            return@LaunchedEffect
+        }
+        while (isActive) {
+            val end = viewModel.gameState.currentTurnEndsAt
+            if (viewModel.gameState.winnerID != null ||
+                viewModel.gameState.phase == TurnPhase.INITIAL_PEEK ||
+                end == null
+            ) {
+                displayTurnSecs = -1
+                break
+            }
+            displayTurnSecs = maxOf(0, ceil((end - System.currentTimeMillis()) / 1000.0).toInt())
+            delay(1000)
+        }
     }
 
     Box(
@@ -79,7 +112,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
             }
 
             // Header HUD
-            if (gameState.phase == TurnPhase.INITIAL_PEEK) {
+            if (gameState.winnerID != null) {
+                // Game is over; the round-result banner takes over.
+            } else if (gameState.phase == TurnPhase.INITIAL_PEEK) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -106,10 +141,25 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     val headerText = if (isMyTurn) "Your Turn" else "${currentTurnName}'s turn"
                     val headerColor = if (isMyTurn) Color(0xFF4CAF50) else Color(0xFFF2BF4D)
                     StatusChip(headerText, color = headerColor)
+                    if (displayTurnSecs >= 0) {
+                        val timerColor = if (displayTurnSecs <= 5) Color(0xFFE53935) else Color(0xFFF2BF4D)
+                        StatusChip("${displayTurnSecs}s", color = timerColor)
+                    }
                     localPlayer?.let { me ->
                         if (me.roundsToSkip > 0) StatusChip("Skip ${me.roundsToSkip}", color = Color(0xFFF44336))
                     }
                 }
+            }
+
+            // Match-result banner sits above the table so the player gets
+            // immediate, prominent feedback about their match attempt.
+            viewModel.matchDiscardStatusText?.let { matchStatus ->
+                val isCorrect = matchStatus.startsWith("Correct", ignoreCase = true)
+                StatusChip(
+                    text = matchStatus,
+                    color = if (isCorrect) Color(0xFF4CAF50) else Color(0xFFE53935),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // Updated iOS-style board layout: N/S/E/W seats around a center table.
@@ -157,13 +207,14 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         }
                     }
 
-                    // North seat
+                    // North seat — cards toward top, name below (toward center)
                     SeatRow(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .padding(top = 10.dp),
                         player = north,
                         isLocal = false,
+                        tableSeat = TableSeatPosition.North,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -172,13 +223,14 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
                     )
 
-                    // South seat (local)
+                    // South seat (local) — name above row (toward center)
                     SeatRow(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 10.dp),
                         player = localPlayer,
                         isLocal = true,
+                        tableSeat = TableSeatPosition.South,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -187,13 +239,14 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
                     )
 
-                    // East seat
+                    // East — inset from table rim; landscape stack; name +180° from prior 90°
                     SeatRow(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 6.dp),
+                            .padding(end = 20.dp),
                         player = east,
                         isLocal = false,
+                        tableSeat = TableSeatPosition.East,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -202,13 +255,14 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
                     )
 
-                    // West seat
+                    // West — inset from table rim
                     SeatRow(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
-                            .padding(start = 6.dp),
+                            .padding(start = 20.dp),
                         player = west,
                         isLocal = false,
+                        tableSeat = TableSeatPosition.West,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -225,110 +279,154 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
                         if (gameState.phase == TurnPhase.INITIAL_PEEK) {
+                            val remaining = maxOf(0, 2 - viewModel.initialPeekedOwnIndices.size)
+                            val canPeekSelected = remaining > 0 &&
+                                localPlayer?.hand?.getOrNull(selectedOwnIndex) != null &&
+                                !viewModel.initialPeekedOwnIndices.contains(selectedOwnIndex)
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Double-tap your cards to peek.", color = Color.White)
-                                val remaining = maxOf(0, 2 - viewModel.initialPeekedOwnIndices.size)
+                                Text("Double-tap your cards to peek, or tap to select then use the button below.", color = Color.White, fontSize = 12.sp, textAlign = TextAlign.Center)
                                 Text("Peeks left: $remaining", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                Button(
+                                    onClick = { viewModel.peekInitialCard(selectedOwnIndex) },
+                                    enabled = canPeekSelected,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Peek selected card") }
                             }
                         }
 
-                        OutlinedButton(
-                            onClick = { viewModel.attemptMatchDiscard(selectedOwnIndex) },
-                            enabled = gameState.phase != TurnPhase.INITIAL_PEEK && gameState.winnerID == null && localPlayer != null,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) { Text("Match Discard (Anytime)") }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { viewModel.draw(DrawSource.DECK) },
-                                enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Draw Deck") }
-                            OutlinedButton(
-                                onClick = { viewModel.draw(DrawSource.DISCARD_TOP) },
-                                enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                            ) { Text("Draw Discard") }
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = { viewModel.replaceWithDrawnCard(selectedOwnIndex) },
-                                enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
-                                modifier = Modifier.weight(1f)
-                            ) { Text("Replace Selected") }
-                            OutlinedButton(
-                                onClick = { viewModel.discardForEffect() },
-                                enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                            ) { Text("Discard for Effect") }
-                        }
-
                         if (gameState.phase == TurnPhase.WAITING_FOR_SPECIAL_RESOLUTION && isMyTurn && activeSpecialRank != null) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(specialPowerText ?: "", color = Color.White, fontWeight = FontWeight.SemiBold)
-                                val mySelectedCard = localPlayer?.hand?.getOrNull(selectedOwnIndex)
-                                val selectedOpponentPlayer = selectedOpponentID?.let { id ->
-                                    gameState.players.firstOrNull { it.id == id }
-                                }
-                                val opponentSelectedCard = selectedOpponentPlayer?.hand?.getOrNull(selectedOpponentIndex)
-                                when (activeSpecialRank) {
-                                    Rank.JACK -> {
-                                        Text("Pick one of your cards above, then use Jack.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Button(
+                            // Active player resolving a J/Q/K effect: show only the
+                            // contextual special-resolution controls, mirroring iOS.
+                            val mySelectedCard = localPlayer?.hand?.getOrNull(selectedOwnIndex)
+                            val selectedOpponentPlayer = selectedOpponentID?.let { id ->
+                                gameState.players.firstOrNull { it.id == id }
+                            }
+                            val opponentSelectedCard = selectedOpponentPlayer?.hand?.getOrNull(selectedOpponentIndex)
+                            when (activeSpecialRank) {
+                                Rank.JACK -> {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ActionButton(
+                                            label = "Peek",
+                                            primary = true,
+                                            enabled = mySelectedCard != null,
                                             onClick = {
                                                 localPlayer?.let { me ->
                                                     viewModel.resolveSpecial(SpecialAction.LookOwnCard(me.id, selectedOwnIndex))
                                                 }
-                                            },
-                                            enabled = mySelectedCard != null,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Peek") }
+                                            }
+                                        )
+                                        Text(
+                                            "Choose a card",
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
-                                    Rank.QUEEN -> {
-                                        Text("Tap an opponent card above, then use Queen.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Button(
+                                }
+                                Rank.QUEEN -> {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ActionButton(
+                                            label = "Peek",
+                                            primary = true,
+                                            enabled = opponentSelectedCard != null,
                                             onClick = {
                                                 selectedOpponentID?.let { targetID ->
                                                     viewModel.resolveSpecial(SpecialAction.LookOtherCard(targetID, selectedOpponentIndex))
                                                 }
-                                            },
-                                            enabled = opponentSelectedCard != null,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Peek") }
+                                            }
+                                        )
+                                        Text(
+                                            "Choose an opponent card",
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
-                                    Rank.KING -> {
-                                        Text("Pick your card and an opponent card above, then use King.", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                                        Button(
+                                }
+                                Rank.KING -> {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ActionButton(
+                                            label = "Swap",
+                                            primary = true,
+                                            enabled = mySelectedCard != null && opponentSelectedCard != null,
                                             onClick = {
-                                                val targetID = selectedOpponentID ?: return@Button
+                                                val targetID = selectedOpponentID ?: return@ActionButton
                                                 localPlayer?.let { me ->
                                                     viewModel.resolveSpecial(
                                                         SpecialAction.SwapCards(me.id, selectedOwnIndex, targetID, selectedOpponentIndex)
                                                     )
                                                 }
-                                            },
-                                            enabled = mySelectedCard != null && opponentSelectedCard != null,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("Swap") }
+                                            }
+                                        )
+                                        Text(
+                                            "Tap a card + opponent card, then swap.",
+                                            color = Color.White.copy(alpha = 0.55f),
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
-                                    else -> Unit
                                 }
+                                else -> Unit
+                            }
+                        } else {
+                            // Standard 2x3 button grid mirroring iOS:
+                            // Row 1: Draw Deck | Draw Discard | Match
+                            // Row 2: Replace   | Discard      | Cabo!
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ActionButton(
+                                    label = "Draw Deck",
+                                    primary = true,
+                                    enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
+                                    onClick = { viewModel.draw(DrawSource.DECK) }
+                                )
+                                ActionButton(
+                                    label = "Draw Discard",
+                                    enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
+                                    onClick = { viewModel.draw(DrawSource.DISCARD_TOP) }
+                                )
+                                ActionButton(
+                                    label = "Match",
+                                    enabled = gameState.phase != TurnPhase.INITIAL_PEEK && localPlayer != null,
+                                    onClick = { viewModel.attemptMatchDiscard(selectedOwnIndex) }
+                                )
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ActionButton(
+                                    label = "Replace",
+                                    primary = true,
+                                    enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
+                                    onClick = { viewModel.replaceWithDrawnCard(selectedOwnIndex) }
+                                )
+                                ActionButton(
+                                    label = "Discard",
+                                    enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
+                                    onClick = { viewModel.discardForEffect() }
+                                )
+                                ActionButton(
+                                    label = "Cabo!",
+                                    accentColor = Color(0xFFF2BF4D),
+                                    enabled = isMyTurn &&
+                                        gameState.phase == TurnPhase.WAITING_FOR_DRAW &&
+                                        gameState.pendingDraw == null &&
+                                        gameState.caboCallerID == null,
+                                    onClick = { viewModel.callCabo() }
+                                )
                             }
                         }
-
-                        Button(
-                            onClick = { viewModel.callCabo() },
-                            enabled = isMyTurn && gameState.phase != TurnPhase.INITIAL_PEEK && gameState.caboCallerID == null,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("Call Cabo") }
                     }
                 }
             } else {
@@ -354,7 +452,8 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                 }
             }
 
-            // Status chips
+            // Status chips (winner / cabo / special-resolution help).
+            // Match-result feedback is rendered above the table, not here.
             when {
                 gameState.winnerID != null -> {
                     val winner = gameState.players.firstOrNull { it.id == gameState.winnerID }
@@ -364,10 +463,10 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     val caller = gameState.players.firstOrNull { it.id == gameState.caboCallerID }
                     if (caller != null) StatusChip("Cabo called by ${caller.name}. Final turns in progress...", color = Color(0xFFFF9800))
                 }
-                viewModel.matchDiscardStatusText != null -> {
-                    StatusChip(viewModel.matchDiscardStatusText!!, color = Color(0xFFFF9800))
-                }
-                gameState.phase == TurnPhase.WAITING_FOR_SPECIAL_RESOLUTION && specialPowerText != null -> {
+                gameState.phase == TurnPhase.WAITING_FOR_SPECIAL_RESOLUTION && specialPowerText != null && isMyTurn -> {
+                    // Only the player resolving the special should see the
+                    // explanation text; opponents shouldn't be told what the
+                    // active card is.
                     StatusChip(specialPowerText, color = Color(0xFF2EBF8C))
                 }
             }
@@ -377,11 +476,92 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     }
 }
 
+private enum class TableSeatPosition {
+    North, South, East, West
+}
+
+@Composable
+private fun PortraitHandCards(
+    layoutHorizontal: Boolean,
+    player: Player,
+    isLocal: Boolean,
+    viewModel: GameViewModel,
+    selectedOwnIndex: Int,
+    onSelectOwn: (Int) -> Unit,
+    selectedOpponentID: String?,
+    selectedOpponentIndex: Int,
+    onSelectOpponent: (String, Int) -> Unit,
+    cardWidth: Dp = 32.dp,
+    cardHeight: Dp = 46.dp,
+    faceSymbolRotationDegrees: Float = 0f,
+) {
+    val hand = player.hand.take(4)
+    if (layoutHorizontal) {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            hand.forEachIndexed { idx, card ->
+                val revealedBase = if (isLocal) {
+                    viewModel.gameState.phase == TurnPhase.INITIAL_PEEK && viewModel.initialPeekedOwnIndices.contains(idx) ||
+                        viewModel.jackPeekedOwnIndex == idx
+                } else {
+                    viewModel.queenPeekedOpponentPlayerID == player.id && viewModel.queenPeekedOpponentIndex == idx
+                }
+                val revealed = revealedBase || viewModel.gameState.winnerID != null
+                TableCard(
+                    text = if (revealed && card != null) card.shortName else "",
+                    isFaceUp = revealed && card != null,
+                    isSelected = if (isLocal) selectedOwnIndex == idx else (selectedOpponentID == player.id && selectedOpponentIndex == idx),
+                    isEmpty = card == null,
+                    width = cardWidth,
+                    height = cardHeight,
+                    onTap = {
+                        if (isLocal) onSelectOwn(idx) else onSelectOpponent(player.id, idx)
+                    },
+                    onDoubleTap = if (isLocal) {
+                        { viewModel.peekInitialCard(idx) }
+                    } else null,
+                    faceSymbolRotationDegrees = faceSymbolRotationDegrees,
+                )
+            }
+        }
+    } else {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            hand.forEachIndexed { idx, card ->
+                val revealedBase = if (isLocal) {
+                    viewModel.gameState.phase == TurnPhase.INITIAL_PEEK && viewModel.initialPeekedOwnIndices.contains(idx) ||
+                        viewModel.jackPeekedOwnIndex == idx
+                } else {
+                    viewModel.queenPeekedOpponentPlayerID == player.id && viewModel.queenPeekedOpponentIndex == idx
+                }
+                val revealed = revealedBase || viewModel.gameState.winnerID != null
+                TableCard(
+                    text = if (revealed && card != null) card.shortName else "",
+                    isFaceUp = revealed && card != null,
+                    isSelected = if (isLocal) selectedOwnIndex == idx else (selectedOpponentID == player.id && selectedOpponentIndex == idx),
+                    isEmpty = card == null,
+                    width = cardWidth,
+                    height = cardHeight,
+                    onTap = {
+                        if (isLocal) onSelectOwn(idx) else onSelectOpponent(player.id, idx)
+                    },
+                    onDoubleTap = if (isLocal) {
+                        { viewModel.peekInitialCard(idx) }
+                    } else null,
+                    faceSymbolRotationDegrees = faceSymbolRotationDegrees,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun SeatRow(
     modifier: Modifier = Modifier,
     player: Player?,
     isLocal: Boolean,
+    tableSeat: TableSeatPosition,
     viewModel: GameViewModel,
     selectedOwnIndex: Int,
     onSelectOwn: (Int) -> Unit,
@@ -389,52 +569,154 @@ private fun SeatRow(
     selectedOpponentIndex: Int,
     onSelectOpponent: (String, Int) -> Unit
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        if (player == null) {
+    if (player == null) {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Text("Empty", color = Color.White.copy(alpha = 0.45f), fontSize = 10.sp)
-        } else {
-            val isTurn = viewModel.gameState.currentPlayerID == player.id
-            Text(
-                if (isLocal) "You" else player.name,
-                color = if (isLocal) Color(0xFFF2BF4D) else if (isTurn) Color(0xFF4CAF50) else Color.White,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                player.hand.take(4).forEachIndexed { idx, card ->
-                    val revealedBase = if (isLocal) {
-                        viewModel.gameState.phase == TurnPhase.INITIAL_PEEK && viewModel.initialPeekedOwnIndices.contains(idx) ||
-                            viewModel.jackPeekedOwnIndex == idx
-                    } else {
-                        viewModel.queenPeekedOpponentPlayerID == player.id && viewModel.queenPeekedOpponentIndex == idx
-                    }
-                    val revealed = revealedBase || viewModel.gameState.winnerID != null
-                    TableCard(
-                        text = if (revealed && card != null) card.shortName else "",
-                        isFaceUp = revealed && card != null,
-                        isSelected = if (isLocal) selectedOwnIndex == idx else (selectedOpponentID == player.id && selectedOpponentIndex == idx),
-                        isEmpty = card == null,
-                        width = 32.dp,
-                        height = 46.dp,
-                        modifier = Modifier.pointerInput(player.id, idx) {
-                            detectTapGestures(
-                                onTap = {
-                                    if (isLocal) onSelectOwn(idx) else onSelectOpponent(player.id, idx)
-                                },
-                                onDoubleTap = {
-                                    if (isLocal) viewModel.peekInitialCard(idx)
-                                }
-                            )
-                        }
-                    )
-                }
-            }
         }
+        return
+    }
+    val isTurn = viewModel.gameState.currentPlayerID == player.id
+    val nameColor = if (isLocal) Color(0xFFF2BF4D) else if (isTurn) Color(0xFF4CAF50) else Color.White
+    val label = if (isLocal) "You" else player.name
+    val seatCardW = 32.dp
+    val seatCardH = 46.dp
+    val (cardW, cardH) = when (tableSeat) {
+        TableSeatPosition.East, TableSeatPosition.West -> seatCardH to seatCardW // landscape: long edge toward table center
+        else -> seatCardW to seatCardH
+    }
+    val faceSymbolRotation = when (tableSeat) {
+        TableSeatPosition.East -> 90f
+        TableSeatPosition.West -> -90f
+        else -> 0f
+    }
+    @Composable
+    fun seatName(rotMod: Modifier) {
+        Text(
+            label,
+            color = nameColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            modifier = rotMod
+        )
+    }
+    val cards: @Composable () -> Unit = {
+        PortraitHandCards(
+            layoutHorizontal = tableSeat == TableSeatPosition.North || tableSeat == TableSeatPosition.South,
+            player = player,
+            isLocal = isLocal,
+            viewModel = viewModel,
+            selectedOwnIndex = selectedOwnIndex,
+            onSelectOwn = onSelectOwn,
+            selectedOpponentID = selectedOpponentID,
+            selectedOpponentIndex = selectedOpponentIndex,
+            onSelectOpponent = onSelectOpponent,
+            cardWidth = cardW,
+            cardHeight = cardH,
+            faceSymbolRotationDegrees = faceSymbolRotation,
+        )
+    }
+    when (tableSeat) {
+        TableSeatPosition.North -> Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            cards()
+            seatName(Modifier)
+        }
+        TableSeatPosition.South -> Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            seatName(Modifier)
+            cards()
+        }
+        TableSeatPosition.East -> Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            seatName(Modifier.rotate(270f))
+            cards()
+        }
+        TableSeatPosition.West -> Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            cards()
+            seatName(Modifier.rotate(90f))
+        }
+    }
+}
+
+/**
+ * Filled rounded-rectangle action button used by the game table controls.
+ * Mirrors the iOS `action(...)` helper so both platforms have the same look:
+ *  - solid fill (no Material outline stroke)
+ *  - rounded corners (8.dp)
+ *  - single-line label with auto-shrink to fit narrow widths
+ *  - three style variants: primary (filled green), secondary (white-12% fill),
+ *    and accented (white-12% fill + custom text color, e.g. gold for "Cabo!").
+ *
+ * Designed to be placed inside a [Row] — it fills equal width via `weight(1f)`.
+ */
+@Composable
+private fun RowScope.ActionButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    primary: Boolean = false,
+    accentColor: Color? = null,
+    height: Dp = 40.dp,
+    fontSize: TextUnit = 12.sp
+) {
+    val accentGreen = Color(0xFF2EBF8C)
+    val bgDark = Color(0xFF101A14)
+    val baseFill = if (primary) (accentColor ?: accentGreen) else Color.White.copy(alpha = 0.12f)
+    val fillColor = if (enabled) baseFill else baseFill.copy(alpha = baseFill.alpha * 0.5f)
+    val rawTextColor = when {
+        primary -> bgDark
+        accentColor != null -> accentColor
+        else -> Color.White
+    }
+    val textColor = if (enabled) rawTextColor else rawTextColor.copy(alpha = 0.4f)
+
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(height)
+            .clip(RoundedCornerShape(8.dp))
+            .background(fillColor)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        // Auto-shrink the label to fit a single line within narrow buttons
+        // (iOS does this implicitly via Text auto-sizing). We start at the
+        // requested font size and step down a couple of times if measurement
+        // says it would overflow, so labels like "Draw Discard" never wrap.
+        var resolvedSize by remember(label, fontSize) { mutableStateOf(fontSize) }
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = resolvedSize,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            onTextLayout = { result ->
+                if (result.hasVisualOverflow && resolvedSize.value > 9f) {
+                    resolvedSize = (resolvedSize.value - 1f).sp
+                }
+            },
+            modifier = Modifier.padding(horizontal = 6.dp)
+        )
     }
 }
 
@@ -463,6 +745,7 @@ private fun StatusChip(text: String, color: Color, modifier: Modifier = Modifier
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TableCard(
     text: String,
@@ -471,7 +754,10 @@ private fun TableCard(
     isEmpty: Boolean,
     width: Dp = 60.dp,
     height: Dp = 84.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTap: (() -> Unit)? = null,
+    onDoubleTap: (() -> Unit)? = null,
+    faceSymbolRotationDegrees: Float = 0f,
 ) {
     val borderColor = if (isSelected) Color.Yellow.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.2f)
     val borderWidth = if (isSelected) 2.4.dp else 1.2.dp
@@ -481,6 +767,16 @@ private fun TableCard(
         else -> CardBack
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val gestureModifier = if (onTap != null || onDoubleTap != null) {
+        Modifier.combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = { onTap?.invoke() },
+            onDoubleClick = onDoubleTap?.let { { it() } }
+        )
+    } else Modifier
+
     Box(
         modifier = modifier
             .width(width)
@@ -488,6 +784,7 @@ private fun TableCard(
             .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
             .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
+            .then(gestureModifier)
             .then(
                 if (isEmpty) Modifier.drawBehind {
                     val stroke = Stroke(
@@ -510,11 +807,20 @@ private fun TableCard(
     ) {
         if (!isEmpty) {
             if (isFaceUp) {
-                Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.rotate(faceSymbolRotationDegrees)
+                ) {
                     Text(
                         text = cardRankText(text),
                         style = TextStyle(
-                            fontSize = if (width > 64.dp) 18.sp else if (width > 40.dp) 14.sp else 11.sp,
+                            fontSize = when {
+                                height <= 34.dp -> 10.sp
+                                width > 64.dp -> 18.sp
+                                width > 40.dp -> 14.sp
+                                else -> 11.sp
+                            },
                             fontWeight = FontWeight.SemiBold,
                             color = cardTextColor(text)
                         ),
@@ -523,7 +829,12 @@ private fun TableCard(
                     Text(
                         text = cardSuitText(text),
                         style = TextStyle(
-                            fontSize = if (width > 64.dp) 18.sp else if (width > 40.dp) 14.sp else 11.sp,
+                            fontSize = when {
+                                height <= 34.dp -> 10.sp
+                                width > 64.dp -> 18.sp
+                                width > 40.dp -> 14.sp
+                                else -> 11.sp
+                            },
                             fontWeight = FontWeight.SemiBold,
                             color = cardTextColor(text)
                         ),

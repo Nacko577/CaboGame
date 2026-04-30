@@ -46,6 +46,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var initialPeekSecondsRemaining by mutableStateOf<Int?>(null)
         private set
+    var currentTurnSecondsRemaining by mutableStateOf<Int?>(null)
+        private set
     var lastDrawnCard by mutableStateOf<Card?>(null)
         private set
     var lastReplacedIncomingCard by mutableStateOf<Card?>(null)
@@ -62,8 +64,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var lobby: LobbyService = RemoteLobbyService()
     private var engine = CaboGameEngine()
     private var initialPeekGraceJob: Job? = null
+    private var turnTimerJob: Job? = null
     private var specialPeekClearJob: Job? = null
+    private var matchStatusClearJob: Job? = null
     private var pendingHostStart: Boolean = false
+    /**
+     * The displayName captured at the moment the user tapped Host or Join.
+     * Used to match ourselves in the host's player list, so editing the name
+     * field after entering the lobby doesn't break self-identification.
+     */
+    private var sessionDisplayName: String? = null
 
     val isHostUser: Boolean get() = hostedCode != null
     val isLocalPlayerReadyForNewGame: Boolean get() =
@@ -86,11 +96,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             when (message) {
                 is NetworkMessage.LobbyState -> Unit
                 is NetworkMessage.GameStateMsg -> {
-                    val incoming = message.state
+                    val incoming = rebaseToLocalClock(message.state, message.serverNowMillis)
                     gameState = incoming
                     engine.load(incoming)
                     if (localPlayerID == null) {
-                        localPlayerID = incoming.players.firstOrNull { it.name == validatedName() }?.id
+                        localPlayerID = identifyLocalPlayer(incoming)?.id
                     }
                     if (incoming.phase != TurnPhase.INITIAL_PEEK &&
                         incoming.currentPlayerID != localPlayerID
@@ -100,12 +110,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     if (incoming.phase != TurnPhase.INITIAL_PEEK) initialPeekedOwnIndices = emptySet()
                     if (incoming.winnerID != null) clearSpecialPeekFeedback()
                     handleInitialPeekGraceIfNeeded()
+                    handleTurnTimerIfNeeded()
                 }
                 is NetworkMessage.PlayerActionMsg -> {
                     if (isHostUser) {
                         try {
                             applyActionAsHost(message.action)
                             handleInitialPeekGraceIfNeeded()
+                            handleTurnTimerIfNeeded()
                         } catch (e: Exception) {
                             lastError = e.message
                         }
@@ -133,7 +145,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         lobby.delegate = lobbyDelegate
     }
 
-    fun setTransport(next: LobbyTransport) {
+    fun switchTransport(next: LobbyTransport) {
         if (next == transport) return
         leaveLobby()
         lobby.delegate = null
@@ -151,13 +163,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun hostLobby() {
+        val name = validatedName()
+        sessionDisplayName = name
         pendingHostStart = true
-        lobby.startHosting(validatedName())
+        lobby.startHosting(name)
         statusText = "Creating lobby..."
     }
 
     fun joinLobby() {
-        lobby.startJoining(validatedName(), joinCodeInput)
+        val name = validatedName()
+        sessionDisplayName = name
+        lobby.startJoining(name, joinCodeInput)
         hostedCode = null
         statusText = "Joining lobby..."
     }
@@ -165,10 +181,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun leaveLobby() {
         lobby.stop()
         initialPeekGraceJob?.cancel(); initialPeekGraceJob = null
+        turnTimerJob?.cancel(); turnTimerJob = null
+        currentTurnSecondsRemaining = null
         specialPeekClearJob?.cancel(); specialPeekClearJob = null
+        matchStatusClearJob?.cancel(); matchStatusClearJob = null
         peers = emptyList()
         hostedCode = null
         pendingHostStart = false
+        sessionDisplayName = null
+        localPlayerID = null
         gameState = GameState()
     }
 
@@ -178,9 +199,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             gameState = engine.state
             clearTurnFeedback()
             initialPeekGraceJob?.cancel(); initialPeekGraceJob = null
+            turnTimerJob?.cancel(); turnTimerJob = null
+            currentTurnSecondsRemaining = null
             // Host must start the countdown immediately when the game loads.
             handleInitialPeekGraceIfNeeded()
-            lobby.send(NetworkMessage.GameStateMsg(gameState))
+            handleTurnTimerIfNeeded()
+            broadcastGameState()
             lobby.send(NetworkMessage.StartGame)
         } catch (e: Exception) {
             lastError = e.message
@@ -233,7 +257,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lastDrawnCard = drawn
                 lastReplacedIncomingCard = null
                 gameState = engine.state
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.Draw(playerID, source)))
             }
@@ -251,13 +275,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 matchAttemptTopDiscardCard = gameState.discardPile.lastOrNull()
             }
             if (isHostUser) {
+                val wasCurrentTurn = gameState.currentPlayerID == playerID
                 val matched = engine.attemptMatchDiscard(playerID, ownCardIndex)
                 gameState = engine.state
-                matchDiscardStatusText = if (matched)
-                    "Matched discard. Card removed from your hand."
-                else
-                    "Wrong match. You will sit out your next turn."
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                matchDiscardStatusText = matchStatusText(matched, wasCurrentTurn)
+                scheduleMatchDiscardClear()
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.AttemptMatchDiscard(playerID, ownCardIndex)))
             }
@@ -285,7 +308,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 engine.peekInitialCard(playerID, index)
                 initialPeekedOwnIndices = initialPeekedOwnIndices + index
                 gameState = engine.state
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 initialPeekedOwnIndices = initialPeekedOwnIndices + index
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.InitialPeek(playerID, index)))
@@ -303,7 +326,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 engine.replaceCard(playerID, index)
                 gameState = engine.state
                 if (incoming != null) { lastReplacedIncomingCard = incoming; lastDrawnCard = incoming }
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.Replace(playerID, index)))
             }
@@ -318,7 +341,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (isHostUser) {
                 engine.discardDrawnCardAndUseEffect(playerID)
                 gameState = engine.state
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.DiscardForEffect(playerID)))
             }
@@ -339,7 +362,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (isHostUser) {
                 engine.resolveSpecialAction(playerID, action)
                 gameState = engine.state
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.ResolveSpecial(playerID, action)))
             }
@@ -354,7 +377,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (isHostUser) {
                 engine.callCabo(playerID)
                 gameState = engine.state
-                lobby.send(NetworkMessage.GameStateMsg(gameState))
+                broadcastGameState()
             } else {
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.CallCabo(playerID)))
             }
@@ -365,9 +388,46 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun addRemotePlayer(name: String) { engine.addPlayer(name) }
 
+    /**
+     * Broadcast the current game state stamped with the host's wall-clock time.
+     * Guests use the timestamp to re-base time-bound state (e.g. the initial
+     * peek deadline) onto their own clock so countdowns stay synchronized
+     * regardless of cross-device clock skew.
+     */
+    private fun broadcastGameState() {
+        lobby.send(
+            NetworkMessage.GameStateMsg(
+                state = gameState,
+                serverNowMillis = System.currentTimeMillis()
+            )
+        )
+    }
+
+    /**
+     * Translate any host-clock timestamps inside [state] into the receiver's
+     * local clock using [serverNowMillis] as a reference point. This keeps the
+     * initial-peek countdown synchronized between devices even when their
+     * system clocks are skewed. Hosts skip the translation since the timestamps
+     * are already in their own local clock.
+     */
+    private fun rebaseToLocalClock(state: GameState, serverNowMillis: Long?): GameState {
+        if (isHostUser || serverNowMillis == null) return state
+        val nowLocal = System.currentTimeMillis()
+        val rebasedPeek = state.initialPeekGraceEndsAt?.let { serverEnd ->
+            nowLocal + (serverEnd - serverNowMillis)
+        }
+        val rebasedTurn = state.currentTurnEndsAt?.let { serverEnd ->
+            nowLocal + (serverEnd - serverNowMillis)
+        }
+        return state.copy(
+            initialPeekGraceEndsAt = rebasedPeek,
+            currentTurnEndsAt = rebasedTurn
+        )
+    }
+
     private fun resetForLobbyAsHost() {
         engine = CaboGameEngine()
-        val id = engine.addPlayer(validatedName())
+        val id = engine.addPlayer(sessionDisplayName ?: validatedName())
         localPlayerID = id
         gameState = engine.state
         clearTurnFeedback()
@@ -376,6 +436,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun validatedName(): String {
         val trimmed = playerName.trim()
         return if (trimmed.isEmpty()) "Player" else trimmed
+    }
+
+    /**
+     * Locate the local player in an incoming [GameState]. The user might have
+     * edited the name field after joining, so we prefer the displayName captured
+     * at host/join time, then fall back to the live one. We do a case-insensitive,
+     * whitespace-trimmed comparison to be forgiving.
+     */
+    private fun identifyLocalPlayer(incoming: GameState): Player? {
+        val candidates = listOfNotNull(sessionDisplayName, validatedName())
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        for (candidate in candidates) {
+            val match = incoming.players.firstOrNull {
+                it.name.trim().equals(candidate, ignoreCase = true)
+            }
+            if (match != null) return match
+        }
+        return null
     }
 
     private fun clearTurnFeedback() {
@@ -396,6 +475,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         specialPeekClearJob = viewModelScope.launch {
             delay(5_000)
             if (isActive) clearSpecialPeekFeedback()
+        }
+    }
+
+    private fun matchStatusText(matched: Boolean, wasCurrentTurn: Boolean): String =
+        when {
+            matched -> "Correct match! Card removed from your hand."
+            wasCurrentTurn -> "Wrong match. Your turn is skipped."
+            else -> "Wrong match. You will sit out your next turn."
+        }
+
+    private fun clearMatchDiscardFeedback() {
+        matchDiscardStatusText = null
+        matchAttemptOwnCard = null
+        matchAttemptTopDiscardCard = null
+        matchStatusClearJob?.cancel(); matchStatusClearJob = null
+    }
+
+    private fun scheduleMatchDiscardClear() {
+        matchStatusClearJob?.cancel()
+        matchStatusClearJob = viewModelScope.launch {
+            delay(5_000)
+            if (isActive) clearMatchDiscardFeedback()
         }
     }
 
@@ -420,6 +521,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (gameState.phase != TurnPhase.INITIAL_PEEK || currentEndsAt == null) {
                     initialPeekSecondsRemaining = null
                     initialPeekGraceJob = null
+                    // Host may have advanced the phase over the network before our
+                    // local countdown reached 0; ensure the main turn timer starts.
+                    handleTurnTimerIfNeeded()
                     return@launch
                 }
 
@@ -433,10 +537,68 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         // Force transition check at grace end time.
                         engine.beginMainTurnsAfterInitialPeekIfReady(nowMillis = currentEndsAt)
                         gameState = engine.state
-                        lobby.send(NetworkMessage.GameStateMsg(gameState))
+                        broadcastGameState()
                     }
                     initialPeekGraceJob = null
+                    // The phase just flipped to main play; kick off the
+                    // per-turn countdown so the UI starts ticking immediately.
+                    handleTurnTimerIfNeeded()
                     return@launch
+                }
+
+                delay(1_000)
+            }
+        }
+    }
+
+    /**
+     * Drives the per-turn countdown. Mirrors [handleInitialPeekGraceIfNeeded]:
+     *  - Updates [currentTurnSecondsRemaining] once a second.
+     *  - On the host, advances the turn (and re-broadcasts) when the
+     *    countdown reaches zero.
+     *  - The job is resilient to state updates: it re-reads the deadline
+     *    every tick, so if the engine resets the deadline mid-loop (after a
+     *    new turn begins), the job automatically picks up the new value.
+     */
+    private fun handleTurnTimerIfNeeded() {
+        val deadline = gameState.currentTurnEndsAt
+        if (gameState.winnerID != null ||
+            gameState.phase == TurnPhase.INITIAL_PEEK ||
+            deadline == null
+        ) {
+            currentTurnSecondsRemaining = null
+            turnTimerJob?.cancel(); turnTimerJob = null
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        currentTurnSecondsRemaining = maxOf(0, ceil((deadline - now) / 1000.0).toInt())
+
+        if (turnTimerJob != null) return
+
+        turnTimerJob = viewModelScope.launch {
+            while (isActive) {
+                val currentEndsAt = gameState.currentTurnEndsAt
+                if (gameState.winnerID != null ||
+                    gameState.phase == TurnPhase.INITIAL_PEEK ||
+                    currentEndsAt == null
+                ) {
+                    currentTurnSecondsRemaining = null
+                    turnTimerJob = null
+                    return@launch
+                }
+
+                val nowMs = System.currentTimeMillis()
+                val secs = maxOf(0, ceil((currentEndsAt - nowMs) / 1000.0).toInt())
+                currentTurnSecondsRemaining = secs
+
+                if (secs == 0 && isHostUser) {
+                    engine.load(gameState)
+                    val advanced = engine.enforceTurnTimeoutIfNeeded(nowMillis = currentEndsAt)
+                    if (advanced) {
+                        gameState = engine.state
+                        broadcastGameState()
+                    }
                 }
 
                 delay(1_000)
@@ -471,10 +633,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     matchAttemptOwnCard = me?.hand?.getOrNull(action.index)
                     matchAttemptTopDiscardCard = gameState.discardPile.lastOrNull()
                 }
+                val wasCurrentTurn = gameState.currentPlayerID == action.playerID
                 val matched = engine.attemptMatchDiscard(action.playerID, action.index)
                 if (action.playerID == localPlayerID) {
-                    matchDiscardStatusText = if (matched) "Matched discard. Card removed from your hand."
-                    else "Wrong match. You will sit out your next turn."
+                    matchDiscardStatusText = matchStatusText(matched, wasCurrentTurn)
+                    scheduleMatchDiscardClear()
                 }
             }
             is PlayerNetworkAction.Draw -> {
@@ -493,18 +656,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             is PlayerNetworkAction.CallCabo -> engine.callCabo(action.playerID)
         }
         gameState = engine.state
-        lobby.send(NetworkMessage.GameStateMsg(gameState))
+        broadcastGameState()
     }
 
     private fun maybeStartGameWhenAllReady() {
         if (!isHostUser || !gameState.rematchRequestedByHost) {
-            lobby.send(NetworkMessage.GameStateMsg(gameState)); return
+            broadcastGameState(); return
         }
         val allIDs = gameState.players.map { it.id }.toSet()
         if (allIDs.isNotEmpty() && allIDs.all { gameState.readyPlayerIDs.contains(it) }) {
             startGameAsHost()
         } else {
-            lobby.send(NetworkMessage.GameStateMsg(gameState))
+            broadcastGameState()
         }
     }
 

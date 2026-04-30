@@ -29,6 +29,10 @@ enum GameRuleError: LocalizedError {
 }
 
 struct CaboGameEngine {
+    /// Maximum length of a single player turn after the initial peek phase.
+    /// Matches the Android engine's `TURN_TIMEOUT_SECONDS`.
+    static let turnTimeoutSeconds: TimeInterval = 20
+
     private(set) var state: GameState
 
     init(players: [Player] = []) {
@@ -59,6 +63,7 @@ struct CaboGameEngine {
         state.hasStarted = true
         state.playersFinishedInitialPeek = 0
         state.initialPeekGraceEndsAt = Date().addingTimeInterval(15)
+        state.currentTurnEndsAt = nil
         state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
 
         for idx in state.players.indices {
@@ -112,6 +117,42 @@ struct CaboGameEngine {
         state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
         state.playersFinishedInitialPeek = 0
         state.initialPeekGraceEndsAt = nil
+        startTurnTimer(now: now)
+    }
+
+    /// Forces the current player's turn to end because the per-turn timer
+    /// expired. Behavior depends on the phase the player got stuck in:
+    ///  - `waitingForDraw`            : skip the turn outright.
+    ///  - `waitingForPlacementOrDiscard`: discard the pending drawn card without
+    ///                                    applying its effect, then advance.
+    ///  - `waitingForSpecialResolution`: forfeit the J/Q/K effect (the card is
+    ///                                    already on the discard pile), advance.
+    /// Returns `true` if the turn was actually ended, `false` if there was
+    /// nothing to do (e.g. game over or initial peek phase).
+    @discardableResult
+    mutating func enforceTurnTimeoutIfNeeded(now: Date = Date()) -> Bool {
+        guard state.winnerID == nil else { return false }
+        guard state.phase != .initialPeek else { return false }
+        guard let deadline = state.currentTurnEndsAt, now >= deadline else { return false }
+
+        if state.phase == .waitingForPlacementOrDiscard, let pending = state.pendingDraw {
+            // Active player drew a card but never placed it: discard the
+            // drawn card with no effect and end the turn.
+            state.discardPile.append(pending.card)
+            state.pendingDraw = nil
+        } else if state.phase == .waitingForSpecialResolution {
+            // The J/Q/K is already on the discard pile from the prior
+            // `discardForEffect` step. We just forfeit the effect.
+            state.pendingDraw = nil
+        }
+        endTurn(now: now)
+        return true
+    }
+
+    private mutating func startTurnTimer(now: Date = Date()) {
+        guard state.winnerID == nil else { return }
+        guard state.phase != .initialPeek else { return }
+        state.currentTurnEndsAt = now.addingTimeInterval(CaboGameEngine.turnTimeoutSeconds)
     }
 
     mutating func attemptMatchDiscard(playerID: UUID, handIndex: Int) throws -> Bool {
@@ -133,8 +174,20 @@ struct CaboGameEngine {
             return true
         }
 
-        // Failed match: player sits out their next full turn.
-        state.players[playerIndex].roundsToSkip += 1
+        // Failed match: end the matcher's *current* turn if it is theirs;
+        // otherwise (an off-turn match attempt) make them sit out their next
+        // full turn.
+        if state.currentPlayerIndex == playerIndex {
+            // Discard any pending drawn card (without applying its effect)
+            // so deck/discard counts stay consistent before advancing turn.
+            if let pending = state.pendingDraw {
+                state.discardPile.append(pending.card)
+                state.pendingDraw = nil
+            }
+            endTurn()
+        } else {
+            state.players[playerIndex].roundsToSkip += 1
+        }
         return false
     }
 
@@ -251,6 +304,7 @@ struct CaboGameEngine {
     mutating func callCabo(for playerID: UUID) throws {
         try validateTurn(for: playerID)
         guard state.phase == .waitingForDraw else { throw GameRuleError.invalidPhase }
+        guard state.pendingDraw == nil else { throw GameRuleError.invalidPhase }
         guard state.caboCallerID == nil else { throw GameRuleError.caboAlreadyCalled }
 
         state.caboCallerID = playerID
@@ -275,7 +329,7 @@ struct CaboGameEngine {
         state.discardPile = [keepTop]
     }
 
-    private mutating func endTurn() {
+    private mutating func endTurn(now: Date = Date()) {
         state.phase = .waitingForDraw
         if !state.players.isEmpty {
             var nextIndex = state.currentPlayerIndex
@@ -294,8 +348,10 @@ struct CaboGameEngine {
             if let caboCallerID = state.caboCallerID,
                state.players[nextIndex].id == caboCallerID {
                 finishRound()
+                return
             }
         }
+        startTurnTimer(now: now)
     }
 
     private mutating func finishRound() {
@@ -304,6 +360,7 @@ struct CaboGameEngine {
         state.caboCallerID = nil
         state.phase = .waitingForDraw
         state.pendingDraw = nil
+        state.currentTurnEndsAt = nil
     }
 
     private func indexOfPlayer(_ playerID: UUID) throws -> Int {

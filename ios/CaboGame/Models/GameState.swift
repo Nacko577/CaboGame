@@ -16,6 +16,10 @@ struct GameState: Codable {
     var initialPeekedIndicesByPlayerIndex: [[Int]]
     var playersFinishedInitialPeek: Int
     var initialPeekGraceEndsAt: Date?
+    /// Wall-clock deadline after which the current player's turn auto-expires.
+    /// `nil` outside of main play (initial peek phase, game over, or before
+    /// the first turn begins).
+    var currentTurnEndsAt: Date?
 
     init(players: [Player] = []) {
         self.players = players
@@ -32,6 +36,7 @@ struct GameState: Codable {
         self.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: players.count)
         self.playersFinishedInitialPeek = 0
         self.initialPeekGraceEndsAt = nil
+        self.currentTurnEndsAt = nil
     }
 
     var currentPlayerID: UUID? {

@@ -21,7 +21,10 @@ data class GameState(
     // Initial peek tracking per player (up to 2 cards each during INITIAL_PEEK).
     val initialPeekedIndicesByPlayerIndex: List<List<Int>> = emptyList(),
     val playersFinishedInitialPeek: Int = 0,
-    val initialPeekGraceEndsAt: Long? = null  // epoch millis
+    val initialPeekGraceEndsAt: Long? = null,  // epoch millis
+    /** Epoch-millis deadline after which the current player's turn auto-expires.
+     *  Null outside of main play (initial peek phase or game over). */
+    val currentTurnEndsAt: Long? = null
 ) {
     val currentPlayerID: String? get() = players.getOrNull(currentPlayerIndex)?.id
 }

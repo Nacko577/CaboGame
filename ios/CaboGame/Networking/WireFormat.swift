@@ -5,6 +5,15 @@ import Foundation
 // (`type` discriminator + flat fields) so iOS and Android can interoperate
 // over either transport.
 
+extension UUID {
+    /// Lowercased UUID string for cross-platform wire compatibility.
+    /// Java/Kotlin's `UUID.toString()` produces lowercase, while Swift's
+    /// `UUID.uuidString` produces uppercase. The host does literal string
+    /// comparisons on player IDs in its engine, so any mismatch in casing
+    /// breaks lookups when iOS sends an action ID back to an Android host.
+    var wireString: String { uuidString.lowercased() }
+}
+
 enum WireMessageType: String, Codable {
     case lobbyState
     case gameState
@@ -37,21 +46,33 @@ struct WireNetworkMessage: Codable {
     let hostName: String?
     let state: WireGameState?
     let action: WirePlayerNetworkAction?
+    /// The host's epoch-millis clock at the moment this message was emitted.
+    /// Used by guests to re-base time-bound state (e.g. the initial peek
+    /// deadline) onto their own clock so countdowns stay synced regardless
+    /// of cross-device clock skew. Optional for backward compatibility.
+    let serverNowMillis: Int64?
 
     static func lobbyState(players: [String], hostName: String) -> WireNetworkMessage {
-        WireNetworkMessage(type: .lobbyState, players: players, hostName: hostName, state: nil, action: nil)
+        WireNetworkMessage(type: .lobbyState, players: players, hostName: hostName, state: nil, action: nil, serverNowMillis: nil)
     }
 
     static func gameState(_ state: WireGameState) -> WireNetworkMessage {
-        WireNetworkMessage(type: .gameState, players: nil, hostName: nil, state: state, action: nil)
+        WireNetworkMessage(
+            type: .gameState,
+            players: nil,
+            hostName: nil,
+            state: state,
+            action: nil,
+            serverNowMillis: Int64(Date().timeIntervalSince1970 * 1000)
+        )
     }
 
     static func playerAction(_ action: WirePlayerNetworkAction) -> WireNetworkMessage {
-        WireNetworkMessage(type: .playerAction, players: nil, hostName: nil, state: nil, action: action)
+        WireNetworkMessage(type: .playerAction, players: nil, hostName: nil, state: nil, action: action, serverNowMillis: nil)
     }
 
     static func startGame() -> WireNetworkMessage {
-        WireNetworkMessage(type: .startGame, players: nil, hostName: nil, state: nil, action: nil)
+        WireNetworkMessage(type: .startGame, players: nil, hostName: nil, state: nil, action: nil, serverNowMillis: nil)
     }
 }
 
@@ -90,6 +111,7 @@ struct WireGameState: Codable {
     let initialPeekedIndicesByPlayerIndex: [[Int]]
     let playersFinishedInitialPeek: Int
     let initialPeekGraceEndsAt: Int64?
+    let currentTurnEndsAt: Int64?
 }
 
 struct WirePlayer: Codable {
@@ -165,7 +187,22 @@ extension WireNetworkMessage {
             return .lobbyState(players: players ?? [], hostName: hostName ?? "")
         case .gameState:
             guard let state else { return nil }
-            return .gameState(state.toAppState())
+            var appState = state.toAppState()
+            // Re-base time-bound deadlines onto our local clock to avoid
+            // cross-device clock skew. The host stamps `serverNowMillis` at
+            // send time; we treat the gap (deadline - serverNowMillis) as
+            // the remaining duration and apply it to our local clock.
+            if let serverNow = serverNowMillis {
+                if let serverEnd = state.initialPeekGraceEndsAt {
+                    let remainingSeconds = TimeInterval(serverEnd - serverNow) / 1000.0
+                    appState.initialPeekGraceEndsAt = Date().addingTimeInterval(remainingSeconds)
+                }
+                if let serverEnd = state.currentTurnEndsAt {
+                    let remainingSeconds = TimeInterval(serverEnd - serverNow) / 1000.0
+                    appState.currentTurnEndsAt = Date().addingTimeInterval(remainingSeconds)
+                }
+            }
+            return .gameState(appState)
         case .playerAction:
             guard let action, let appAction = action.toAppAction() else { return nil }
             return .playerAction(appAction)
@@ -179,23 +216,23 @@ extension WirePlayerNetworkAction {
     init(from app: PlayerNetworkAction) {
         switch app {
         case .initialPeek(let playerID, let index):
-            self = .init(type: .initialPeek, playerID: playerID.uuidString, index: index, isReady: nil, source: nil, action: nil)
+            self = .init(type: .initialPeek, playerID: playerID.wireString, index: index, isReady: nil, source: nil, action: nil)
         case .startNewGameRound(let playerID):
-            self = .init(type: .startNewGameRound, playerID: playerID.uuidString, index: nil, isReady: nil, source: nil, action: nil)
+            self = .init(type: .startNewGameRound, playerID: playerID.wireString, index: nil, isReady: nil, source: nil, action: nil)
         case .setReadyForNewGame(let playerID, let isReady):
-            self = .init(type: .setReadyForNewGame, playerID: playerID.uuidString, index: nil, isReady: isReady, source: nil, action: nil)
+            self = .init(type: .setReadyForNewGame, playerID: playerID.wireString, index: nil, isReady: isReady, source: nil, action: nil)
         case .attemptMatchDiscard(let playerID, let index):
-            self = .init(type: .attemptMatchDiscard, playerID: playerID.uuidString, index: index, isReady: nil, source: nil, action: nil)
+            self = .init(type: .attemptMatchDiscard, playerID: playerID.wireString, index: index, isReady: nil, source: nil, action: nil)
         case .draw(let playerID, let source):
-            self = .init(type: .draw, playerID: playerID.uuidString, index: nil, isReady: nil, source: WireDrawSource(from: source), action: nil)
+            self = .init(type: .draw, playerID: playerID.wireString, index: nil, isReady: nil, source: WireDrawSource(from: source), action: nil)
         case .replace(let playerID, let index):
-            self = .init(type: .replace, playerID: playerID.uuidString, index: index, isReady: nil, source: nil, action: nil)
+            self = .init(type: .replace, playerID: playerID.wireString, index: index, isReady: nil, source: nil, action: nil)
         case .discardForEffect(let playerID):
-            self = .init(type: .discardForEffect, playerID: playerID.uuidString, index: nil, isReady: nil, source: nil, action: nil)
+            self = .init(type: .discardForEffect, playerID: playerID.wireString, index: nil, isReady: nil, source: nil, action: nil)
         case .resolveSpecial(let playerID, let action):
-            self = .init(type: .resolveSpecial, playerID: playerID.uuidString, index: nil, isReady: nil, source: nil, action: WireSpecialAction(from: action))
+            self = .init(type: .resolveSpecial, playerID: playerID.wireString, index: nil, isReady: nil, source: nil, action: WireSpecialAction(from: action))
         case .callCabo(let playerID):
-            self = .init(type: .callCabo, playerID: playerID.uuidString, index: nil, isReady: nil, source: nil, action: nil)
+            self = .init(type: .callCabo, playerID: playerID.wireString, index: nil, isReady: nil, source: nil, action: nil)
         }
     }
 
@@ -241,11 +278,11 @@ extension WireSpecialAction {
         case .none:
             self = .init(type: .none, playerID: nil, cardIndex: nil, targetPlayerID: nil, fromPlayerID: nil, fromCardIndex: nil, toPlayerID: nil, toCardIndex: nil)
         case .lookOwnCard(let playerID, let cardIndex):
-            self = .init(type: .lookOwnCard, playerID: playerID.uuidString, cardIndex: cardIndex, targetPlayerID: nil, fromPlayerID: nil, fromCardIndex: nil, toPlayerID: nil, toCardIndex: nil)
+            self = .init(type: .lookOwnCard, playerID: playerID.wireString, cardIndex: cardIndex, targetPlayerID: nil, fromPlayerID: nil, fromCardIndex: nil, toPlayerID: nil, toCardIndex: nil)
         case .lookOtherCard(let targetPlayerID, let cardIndex):
-            self = .init(type: .lookOtherCard, playerID: nil, cardIndex: cardIndex, targetPlayerID: targetPlayerID.uuidString, fromPlayerID: nil, fromCardIndex: nil, toPlayerID: nil, toCardIndex: nil)
+            self = .init(type: .lookOtherCard, playerID: nil, cardIndex: cardIndex, targetPlayerID: targetPlayerID.wireString, fromPlayerID: nil, fromCardIndex: nil, toPlayerID: nil, toCardIndex: nil)
         case .swapCards(let fromPlayerID, let fromCardIndex, let toPlayerID, let toCardIndex):
-            self = .init(type: .swapCards, playerID: nil, cardIndex: nil, targetPlayerID: nil, fromPlayerID: fromPlayerID.uuidString, fromCardIndex: fromCardIndex, toPlayerID: toPlayerID.uuidString, toCardIndex: toCardIndex)
+            self = .init(type: .swapCards, playerID: nil, cardIndex: nil, targetPlayerID: nil, fromPlayerID: fromPlayerID.wireString, fromCardIndex: fromCardIndex, toPlayerID: toPlayerID.wireString, toCardIndex: toCardIndex)
         }
     }
 
@@ -278,14 +315,15 @@ extension WireGameState {
         self.currentPlayerIndex = app.currentPlayerIndex
         self.phase = WireTurnPhase(from: app.phase)
         self.pendingDraw = app.pendingDraw.map(WirePendingDraw.init(from:))
-        self.winnerID = app.winnerID?.uuidString
-        self.caboCallerID = app.caboCallerID?.uuidString
+        self.winnerID = app.winnerID?.wireString
+        self.caboCallerID = app.caboCallerID?.wireString
         self.rematchRequestedByHost = app.rematchRequestedByHost
-        self.readyPlayerIDs = app.readyPlayerIDs.map(\.uuidString)
+        self.readyPlayerIDs = app.readyPlayerIDs.map(\.wireString)
         self.hasStarted = app.hasStarted
         self.initialPeekedIndicesByPlayerIndex = app.initialPeekedIndicesByPlayerIndex
         self.playersFinishedInitialPeek = app.playersFinishedInitialPeek
         self.initialPeekGraceEndsAt = app.initialPeekGraceEndsAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+        self.currentTurnEndsAt = app.currentTurnEndsAt.map { Int64($0.timeIntervalSince1970 * 1000) }
     }
 
     func toAppState() -> GameState {
@@ -303,13 +341,14 @@ extension WireGameState {
         state.initialPeekedIndicesByPlayerIndex = initialPeekedIndicesByPlayerIndex
         state.playersFinishedInitialPeek = playersFinishedInitialPeek
         state.initialPeekGraceEndsAt = initialPeekGraceEndsAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+        state.currentTurnEndsAt = currentTurnEndsAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
         return state
     }
 }
 
 extension WirePlayer {
     init(from app: Player) {
-        self.id = app.id.uuidString
+        self.id = app.id.wireString
         self.name = app.name
         self.hand = app.hand.map { $0.map(WireCard.init(from:)) }
         self.roundsToSkip = app.roundsToSkip
@@ -338,7 +377,7 @@ extension WirePendingDraw {
 
 extension WireCard {
     init(from app: Card) {
-        self.id = app.id.uuidString
+        self.id = app.id.wireString
         self.suit = WireSuit(from: app.suit)
         self.rank = WireRank(from: app.rank)
     }

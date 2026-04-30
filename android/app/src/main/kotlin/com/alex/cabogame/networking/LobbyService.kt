@@ -34,7 +34,16 @@ sealed class NetworkMessage {
     data class LobbyState(val players: List<String>, val hostName: String) : NetworkMessage()
 
     @Serializable @SerialName("gameState")
-    data class GameStateMsg(val state: GameState) : NetworkMessage()
+    data class GameStateMsg(
+        val state: GameState,
+        /**
+         * The host's epoch-millis clock at the moment this message was emitted.
+         * Used by guests to re-base [GameState.initialPeekGraceEndsAt] onto
+         * their own local clock, so countdowns stay synced even when the two
+         * devices' system clocks are skewed.
+         */
+        val serverNowMillis: Long? = null
+    ) : NetworkMessage()
 
     @Serializable @SerialName("playerAction")
     data class PlayerActionMsg(val action: PlayerNetworkAction) : NetworkMessage()

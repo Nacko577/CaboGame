@@ -33,7 +33,14 @@ class RemoteLobbyService(
     override var joinCode: String? = null
         private set
 
-    private val json = Json { classDiscriminator = "type"; ignoreUnknownKeys = true }
+    private val json = Json {
+        classDiscriminator = "type"
+        ignoreUnknownKeys = true
+        // Required so iOS can decode our gameState/playerAction payloads. Swift's
+        // Codable expects every non-optional field to be present in the JSON,
+        // but kotlinx.serialization omits defaults unless this is enabled.
+        encodeDefaults = true
+    }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val client: OkHttpClient = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)

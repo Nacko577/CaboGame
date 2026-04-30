@@ -3,7 +3,11 @@ import SwiftUI
 struct LobbyView: View {
     @EnvironmentObject private var viewModel: GameViewModel
     let onBack: () -> Void
-    
+
+    private var trimmedPlayerName: String {
+        viewModel.playerName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         ZStack {
             // Rich gradient background
@@ -61,10 +65,11 @@ struct LobbyView: View {
                     
                     // Player Name Card
                     LobbyCard(icon: "person.fill", title: "Your Name", accentColor: Color(red: 0.18, green: 0.75, blue: 0.55)) {
+                        let nameLocked = viewModel.hostedCode != nil || !viewModel.peers.isEmpty
                         TextField("", text: $viewModel.playerName, prompt: Text("Enter your name").foregroundColor(.white.opacity(0.35)))
                             .textInputAutocapitalization(.words)
                             .font(.system(size: 16, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.white.opacity(nameLocked ? 0.5 : 1.0))
                             .padding(14)
                             .background(Color.white.opacity(0.06))
                             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -72,6 +77,7 @@ struct LobbyView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
                             )
+                            .disabled(nameLocked)
                     }
 
                     // Transport Card (Online vs Same Wi-Fi)
@@ -79,7 +85,7 @@ struct LobbyView: View {
                         HStack(spacing: 8) {
                             ForEach(LobbyTransport.allCases) { option in
                                 Button {
-                                    viewModel.setTransport(option)
+                                    viewModel.switchTransport(option)
                                 } label: {
                                     Text(option.label)
                                         .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -158,7 +164,7 @@ struct LobbyView: View {
                                     )
                             }
                             .buttonStyle(ScaleButtonStyle())
-                            .disabled(viewModel.hostedCode != nil)
+                            .disabled(viewModel.hostedCode != nil || trimmedPlayerName.isEmpty)
                         }
                         
                         // Join Card
@@ -191,6 +197,7 @@ struct LobbyView: View {
                                     )
                             }
                             .buttonStyle(ScaleButtonStyle())
+                            .disabled(trimmedPlayerName.isEmpty || viewModel.joinCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
                     

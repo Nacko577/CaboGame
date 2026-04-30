@@ -28,6 +28,7 @@ final class GameViewModel: ObservableObject {
     @Published var queenPeekedOpponentPlayerID: UUID?
     @Published var queenPeekedOpponentIndex: Int?
     @Published var initialPeekSecondsRemaining: Int?
+    @Published var currentTurnSecondsRemaining: Int?
     @Published var lastDrawnCard: Card?
     @Published var lastReplacedIncomingCard: Card?
     @Published var matchDiscardStatusText: String?
@@ -38,8 +39,14 @@ final class GameViewModel: ObservableObject {
     private var lobby: LobbyService
     private var engine = CaboGameEngine()
     private var initialPeekGraceTask: Task<Void, Never>?
+    private var turnTimerTask: Task<Void, Never>?
     private var specialPeekClearTask: Task<Void, Never>?
+    private var matchStatusClearTask: Task<Void, Never>?
     private var pendingHostStart: Bool = false
+    /// The displayName captured at the moment the user tapped Host or Join.
+    /// Used to match ourselves in the host's player list, so editing the name
+    /// field after entering the lobby doesn't break self-identification.
+    private var sessionDisplayName: String?
 
     init(lobby: LobbyService? = nil) {
         let initial: LobbyService = lobby ?? RemoteLobbyService()
@@ -47,7 +54,7 @@ final class GameViewModel: ObservableObject {
         self.lobby.delegate = self
     }
 
-    func setTransport(_ next: LobbyTransport) {
+    func switchTransport(_ next: LobbyTransport) {
         guard next != transport else { return }
         leaveLobby()
         lobby.delegate = nil
@@ -67,21 +74,27 @@ final class GameViewModel: ObservableObject {
 
     func hostLobby() {
         do {
+            let name = validatedName()
+            sessionDisplayName = name
             pendingHostStart = true
-            try lobby.startHosting(displayName: validatedName())
+            try lobby.startHosting(displayName: name)
             statusText = "Creating lobby..."
         } catch {
             pendingHostStart = false
+            sessionDisplayName = nil
             lastError = error.localizedDescription
         }
     }
 
     func joinLobby() {
         do {
-            try lobby.startJoining(displayName: validatedName(), code: joinCodeInput)
+            let name = validatedName()
+            sessionDisplayName = name
+            try lobby.startJoining(displayName: name, code: joinCodeInput)
             hostedCode = nil
             statusText = "Joining lobby..."
         } catch {
+            sessionDisplayName = nil
             lastError = error.localizedDescription
         }
     }
@@ -90,11 +103,18 @@ final class GameViewModel: ObservableObject {
         lobby.stop()
         initialPeekGraceTask?.cancel()
         initialPeekGraceTask = nil
+        turnTimerTask?.cancel()
+        turnTimerTask = nil
+        currentTurnSecondsRemaining = nil
         specialPeekClearTask?.cancel()
         specialPeekClearTask = nil
+        matchStatusClearTask?.cancel()
+        matchStatusClearTask = nil
         peers = []
         hostedCode = nil
         pendingHostStart = false
+        sessionDisplayName = nil
+        localPlayerID = nil
         gameState = GameState()
     }
 
@@ -105,6 +125,14 @@ final class GameViewModel: ObservableObject {
             clearTurnFeedback()
             initialPeekGraceTask?.cancel()
             initialPeekGraceTask = nil
+            turnTimerTask?.cancel()
+            turnTimerTask = nil
+            currentTurnSecondsRemaining = nil
+            // Host must start the countdown immediately when the game loads,
+            // otherwise the host's timer only kicks in after the first guest
+            // action, making it appear shorter than the guests' timer.
+            handleInitialPeekGraceIfNeeded()
+            handleTurnTimerIfNeeded()
             try lobby.send(.gameState(gameState))
             try lobby.send(.startGame)
         } catch {
@@ -151,7 +179,7 @@ final class GameViewModel: ObservableObject {
     }
 
     func addLocalPlayerAsHost() {
-        let id = engine.addPlayer(name: validatedName())
+        let id = engine.addPlayer(name: sessionDisplayName ?? validatedName())
         localPlayerID = id
     }
 
@@ -187,11 +215,11 @@ final class GameViewModel: ObservableObject {
                 matchAttemptTopDiscardCard = topDiscard
             }
             if isHost {
+                let wasCurrentTurn = gameState.currentPlayerID == playerID
                 let matched = try engine.attemptMatchDiscard(playerID: playerID, handIndex: index)
                 gameState = engine.state
-                matchDiscardStatusText = matched
-                    ? "Matched discard. Card removed from your hand."
-                    : "Wrong match. You will sit out your next turn."
+                matchDiscardStatusText = matchStatusText(matched: matched, wasCurrentTurn: wasCurrentTurn)
+                scheduleMatchDiscardClear()
                 try lobby.send(.gameState(gameState))
             } else {
                 try lobby.send(.playerAction(.attemptMatchDiscard(playerID: playerID, index: index)))
@@ -298,6 +326,28 @@ final class GameViewModel: ObservableObject {
         return trimmed.isEmpty ? "Player" : trimmed
     }
 
+    /// Locate the local player in an incoming `GameState`. The user might have
+    /// edited the name field after joining, so we prefer the displayName captured
+    /// at host/join time, then fall back to the live one. We do a case-insensitive,
+    /// whitespace-trimmed comparison to be forgiving.
+    private func identifyLocalPlayer(in incoming: GameState) -> Player? {
+        let candidates: [String] = [
+            sessionDisplayName,
+            validatedName()
+        ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+         .filter { !$0.isEmpty }
+
+        for candidate in candidates {
+            if let match = incoming.players.first(where: {
+                $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare(candidate) == .orderedSame
+            }) {
+                return match
+            }
+        }
+        return nil
+    }
+
     private func resetForLobbyAsHost() {
         engine = CaboGameEngine()
         addLocalPlayerAsHost()
@@ -334,6 +384,34 @@ final class GameViewModel: ObservableObject {
         }
     }
 
+    private func matchStatusText(matched: Bool, wasCurrentTurn: Bool) -> String {
+        if matched {
+            return "Correct match! Card removed from your hand."
+        }
+        return wasCurrentTurn
+            ? "Wrong match. Your turn is skipped."
+            : "Wrong match. You will sit out your next turn."
+    }
+
+    private func clearMatchDiscardFeedback() {
+        matchDiscardStatusText = nil
+        matchAttemptOwnCard = nil
+        matchAttemptTopDiscardCard = nil
+        matchStatusClearTask?.cancel()
+        matchStatusClearTask = nil
+    }
+
+    private func scheduleMatchDiscardClear(after seconds: UInt64 = 5) {
+        matchStatusClearTask?.cancel()
+        matchStatusClearTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            if !Task.isCancelled {
+                self.clearMatchDiscardFeedback()
+            }
+        }
+    }
+
     private func applyActionAsHost(_ action: PlayerNetworkAction) throws {
         switch action {
         case .initialPeek(let playerID, let index):
@@ -366,11 +444,11 @@ final class GameViewModel: ObservableObject {
                 matchAttemptOwnCard = selected
                 matchAttemptTopDiscardCard = topDiscard
             }
+            let wasCurrentTurn = gameState.currentPlayerID == playerID
             let matched = try engine.attemptMatchDiscard(playerID: playerID, handIndex: index)
             if playerID == localPlayerID {
-                matchDiscardStatusText = matched
-                    ? "Matched discard. Card removed from your hand."
-                    : "Wrong match. You will sit out your next turn."
+                matchDiscardStatusText = matchStatusText(matched: matched, wasCurrentTurn: wasCurrentTurn)
+                scheduleMatchDiscardClear()
             }
         case .draw(let playerID, let source):
             let card = try engine.drawCard(for: playerID, source: source)
@@ -434,6 +512,9 @@ final class GameViewModel: ObservableObject {
                       let graceEndsAt = self.gameState.initialPeekGraceEndsAt else {
                     self.initialPeekSecondsRemaining = nil
                     self.initialPeekGraceTask = nil
+                    // The phase just flipped to main play; kick off the
+                    // per-turn countdown so the UI starts ticking immediately.
+                    self.handleTurnTimerIfNeeded()
                     return
                 }
 
@@ -451,8 +532,61 @@ final class GameViewModel: ObservableObject {
                         }
                     }
                     self.initialPeekGraceTask = nil
+                    self.handleTurnTimerIfNeeded()
                     return
                 }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
+
+    /// Drives the per-turn countdown. Mirrors `handleInitialPeekGraceIfNeeded`:
+    ///  - Updates `currentTurnSecondsRemaining` once a second.
+    ///  - On the host, advances the turn (and re-broadcasts) when the
+    ///    countdown reaches zero.
+    ///  - The task is resilient to state updates: it re-reads the deadline
+    ///    every tick, so if the engine resets the deadline mid-loop (after a
+    ///    new turn begins), the task automatically picks up the new value.
+    private func handleTurnTimerIfNeeded() {
+        guard gameState.winnerID == nil,
+              gameState.phase != .initialPeek,
+              let deadline = gameState.currentTurnEndsAt else {
+            currentTurnSecondsRemaining = nil
+            turnTimerTask?.cancel()
+            turnTimerTask = nil
+            return
+        }
+
+        currentTurnSecondsRemaining = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+        if turnTimerTask != nil { return }
+
+        turnTimerTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard self.gameState.winnerID == nil,
+                      self.gameState.phase != .initialPeek,
+                      let deadline = self.gameState.currentTurnEndsAt else {
+                    self.currentTurnSecondsRemaining = nil
+                    self.turnTimerTask = nil
+                    return
+                }
+
+                let secs = max(0, Int(ceil(deadline.timeIntervalSinceNow)))
+                self.currentTurnSecondsRemaining = secs
+
+                if secs == 0 && self.isHost {
+                    self.engine.load(state: self.gameState)
+                    let advanced = self.engine.enforceTurnTimeoutIfNeeded()
+                    if advanced {
+                        self.gameState = self.engine.state
+                        do {
+                            try self.lobby.send(.gameState(self.gameState))
+                        } catch {
+                            self.lastError = error.localizedDescription
+                        }
+                    }
+                }
+
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
@@ -489,9 +623,8 @@ extension GameViewModel: LobbyServiceDelegate {
             case .gameState(let incoming):
                 self.gameState = incoming
                 self.engine.load(state: incoming)
-                if self.localPlayerID == nil,
-                   let me = incoming.players.first(where: { $0.name == self.validatedName() }) {
-                    self.localPlayerID = me.id
+                if self.localPlayerID == nil {
+                    self.localPlayerID = self.identifyLocalPlayer(in: incoming)?.id
                 }
                 if incoming.currentPlayerID != self.localPlayerID,
                    incoming.phase != .initialPeek {
@@ -504,11 +637,13 @@ extension GameViewModel: LobbyServiceDelegate {
                     self.clearSpecialPeekFeedback()
                 }
                 self.handleInitialPeekGraceIfNeeded()
+                self.handleTurnTimerIfNeeded()
             case .playerAction(let action):
                 if self.isHost {
                     do {
                         try self.applyActionAsHost(action)
                         self.handleInitialPeekGraceIfNeeded()
+                        self.handleTurnTimerIfNeeded()
                     } catch {
                         self.lastError = error.localizedDescription
                     }

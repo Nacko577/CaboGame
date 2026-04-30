@@ -183,10 +183,14 @@ final class RemoteLobbyService: NSObject, LobbyService {
     }
 
     private func cleanup() {
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
+        // invalidateAndCancel() cancels every outstanding task on this session
+        // and releases the delegate. Calling task.cancel(with:reason:) on a
+        // task that hasn't fully connected yet can trip Foundation's
+        // "invalid reuse after initialization" guard, so we let the session
+        // handle teardown.
         session?.invalidateAndCancel()
         session = nil
+        task = nil
         didOpen = false
         pendingHost = false
         pendingJoinCode = nil

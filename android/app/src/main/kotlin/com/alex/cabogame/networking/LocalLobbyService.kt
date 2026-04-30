@@ -31,7 +31,14 @@ class LocalLobbyService(private val context: Context) : LobbyService {
     }
     // NSD/Bonjour service type WITHOUT trailing dot (RFC 6763, Android docs).
     private val serviceType = "_cabo-local._tcp"
-    private val json = Json { classDiscriminator = "type"; ignoreUnknownKeys = true }
+    private val json = Json {
+        classDiscriminator = "type"
+        ignoreUnknownKeys = true
+        // Required so iOS can decode our gameState/playerAction payloads. Swift's
+        // Codable expects every non-optional field to be present in the JSON,
+        // but kotlinx.serialization omits defaults unless this is enabled.
+        encodeDefaults = true
+    }
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private var serverSocket: ServerSocket? = null
