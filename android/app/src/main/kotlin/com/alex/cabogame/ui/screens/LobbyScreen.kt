@@ -105,7 +105,7 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                         focusedContainerColor = Color.White.copy(alpha = 0.12f),
                         unfocusedContainerColor = Color.White.copy(alpha = 0.12f),
                         disabledContainerColor = Color.White.copy(alpha = 0.08f),
-                        focusedBorderColor = Color.White.copy(alpha = 0.4f),
+                        focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
                         disabledBorderColor = Color.White.copy(alpha = 0.15f)
                     ),
@@ -243,27 +243,39 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                     val canJoin = viewModel.playerName.trim().isNotEmpty() &&
                         viewModel.joinCodeInput.trim().isNotEmpty() &&
                         viewModel.hostedCode == null
-                    OutlinedButton(
+                    Button(
                         onClick = { viewModel.joinLobby() },
                         enabled = canJoin,
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color(0xFF8BBBEF).copy(alpha = 0.22f),
-                            contentColor = Color.White
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color(0xFF10221A)
                         ),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = Brush.linearGradient(listOf(Color(0xFF8BBBEF), Color(0xFF8BBBEF)))
-                        ),
+                        contentPadding = PaddingValues(0.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp)
                     ) {
-                        Text(
-                            "Join",
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Default,
-                            fontSize = 15.sp
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF9EC8F6),
+                                            Color(0xFF6B9EE3)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Join",
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Default,
+                                fontSize = 15.sp
+                            )
+                        }
                     }
                 }
             }
