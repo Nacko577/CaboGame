@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cabo: Card Game — Support</title>
+  <style>
+    :root {
+      --bg: #0c1814;
+      --card: #15281e;
+      --border: #2e8e67;
+      --text: #f0e5cc;
+      --muted: rgba(240, 229, 204, 0.72);
+      --accent: #3cc696;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, var(--bg) 0%, #050a08 100%);
+      color: var(--text);
+      line-height: 1.55;
+      padding: 2rem 1.25rem 3rem;
+    }
+    .wrap { max-width: 40rem; margin: 0 auto; }
+    h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.02em; margin: 0 0 0.35rem; }
+    .sub { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.75rem; }
+    section {
+      background: var(--card);
+      border: 1px solid rgba(46, 142, 103, 0.45);
+      border-radius: 12px;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin: 0 0 0.65rem; }
+    p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.95rem; }
+    p:last-child { margin-bottom: 0; }
+    a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+    a:hover { color: #5ed9ae; }
+    ul { margin: 0.35rem 0 0; padding-left: 1.15rem; color: var(--muted); font-size: 0.95rem; }
+    li { margin-bottom: 0.45rem; }
+    footer { margin-top: 2rem; font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Cabo: Card Game</h1>
+    <p class="sub">Support &amp; help for the mobile app.</p>
+
+    <section>
+      <h2>Contact</h2>
+      <p>
+        For questions, bugs, or feedback, email:
+        <a href="mailto:support@navitechsrl.com">support@navitechsrl.com</a>
+      </p>
+      <!-- Replace the address above if your team uses a different inbox. -->
+    </section>
+
+    <section>
+      <h2>Tips</h2>
+      <ul>
+        <li><strong>Online play</strong> needs a stable internet connection (Wi‑Fi or mobile data). Play uses a secure relay server WebSocket (<code>wss://</code>).</li>
+        <li><strong>Same Wi‑Fi</strong> discovers games on your local network. iOS may ask for <strong>Local Network</strong> permission—allow it for nearby discovery.</li>
+        <li>If a lobby code doesn’t connect, confirm everyone uses the same transport (online vs same Wi‑Fi) and check spelling of the code.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Legal</h2>
+      <p>
+        <a href="privacy.html">Privacy policy</a>
+      </p>
+    </section>
+
+    <footer>
+      © Navitech Systems SRL
+    </footer>
+  </div>
+</body>
+</html>

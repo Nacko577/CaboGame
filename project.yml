@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.0
-    PRODUCT_BUNDLE_IDENTIFIER: com.alex.CaboGame
+    PRODUCT_BUNDLE_IDENTIFIER: com.navitech.cabo
     MARKETING_VERSION: 1.0
     CURRENT_PROJECT_VERSION: 1
     GENERATE_INFOPLIST_FILE: YES

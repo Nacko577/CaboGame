@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cabo: Card Game — Privacy</title>
+  <style>
+    :root {
+      --bg: #0c1814;
+      --card: #15281e;
+      --text: #f0e5cc;
+      --muted: rgba(240, 229, 204, 0.78);
+      --accent: #3cc696;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, var(--bg) 0%, #050a08 100%);
+      color: var(--text);
+      line-height: 1.55;
+      padding: 2rem 1.25rem 3rem;
+    }
+    .wrap { max-width: 40rem; margin: 0 auto; }
+    h1 { font-size: 1.35rem; font-weight: 800; margin: 0 0 0.5rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+    section {
+      background: var(--card);
+      border: 1px solid rgba(46, 142, 103, 0.45);
+      border-radius: 12px;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--accent); }
+    p, li { color: var(--muted); font-size: 0.92rem; margin: 0 0 0.65rem; }
+    ul { padding-left: 1.2rem; margin: 0; }
+    li { margin-bottom: 0.4rem; }
+    a { color: var(--accent); }
+    .back { margin-top: 1.5rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Privacy policy</h1>
+    <p class="meta">Cabo: Card Game · Last updated: February 2026</p>
+
+    <section>
+      <h2>Summary</h2>
+      <p>
+        Cabo is a multiplayer card game. We don’t sell your data. The app connects you to other
+        players either over the internet (relay server) or on the same local network (Wi‑Fi).
+        We don’t require an account.
+      </p>
+    </section>
+
+    <section>
+      <h2>What the app processes</h2>
+      <ul>
+        <li><strong>Display name</strong> you enter in the lobby (shared with others in your session so they can see who is playing).</li>
+        <li><strong>Gameplay data</strong> needed to run a match (e.g. game state synchronized between players).</li>
+        <li><strong>Networking:</strong> online mode uses encrypted WebSocket (<code>wss://</code>) to a relay server. Same‑Wi‑Fi mode uses local network protocols so nearby devices can find each other—your system may show a local network permission prompt.</li>
+        <li><strong>Optional override</strong> for the relay server URL may be stored in the app’s settings storage on your device (for advanced testing only).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What we don’t do</h2>
+      <ul>
+        <li>No ads SDK in this policy scope (if that changes, this page will be updated).</li>
+        <li>No account system—no passwords stored by the app for Cabo itself.</li>
+        <li>No deliberate collection of contacts, photos, or precise location for advertising.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Third parties</h2>
+      <p>
+        Online play relies on <strong>your network provider</strong> and the <strong>relay server</strong> operator hosting the WebSocket endpoint configured in the app. Treat gameplay messages as visible to players in the same session and to infrastructure needed to deliver them.
+      </p>
+    </section>
+
+    <section>
+      <h2>Children</h2>
+      <p>
+        The game is suitable for general audiences. If you are a parent and have concerns, contact us at
+        <a href="mailto:support@navitechsrl.com">support@navitechsrl.com</a>.
+      </p>
+    </section>
+
+    <section>
+      <h2>Changes</h2>
+      <p>
+        We may update this policy occasionally. The “Last updated” date at the top will change when it does.
+      </p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>
+        Navitech Systems SRL — <a href="mailto:support@navitechsrl.com">support@navitechsrl.com</a>
+      </p>
+    </section>
+
+    <p class="back"><a href="index.html">← Back to support</a></p>
+  </div>
+</body>
+</html>

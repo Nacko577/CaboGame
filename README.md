@@ -54,7 +54,7 @@ After deploying, plug the `wss://` URL into both apps:
   You can also override at runtime without rebuilding by setting the user
   default `cabogame.serverURL`:
   ```bash
-  xcrun simctl spawn booted defaults write com.alex.CaboGame cabogame.serverURL "wss://your-server/ws"
+  xcrun simctl spawn booted defaults write com.navitech.cabo cabogame.serverURL "wss://your-server/ws"
   ```
 - **Android:** edit `DEFAULT_PRODUCTION_URL` in
   [`android/app/src/main/kotlin/com/alex/cabogame/networking/ServerConfig.kt`](android/app/src/main/kotlin/com/alex/cabogame/networking/ServerConfig.kt).
