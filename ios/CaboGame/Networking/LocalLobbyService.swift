@@ -246,7 +246,17 @@ final class LocalLobbyService: NSObject, LobbyService {
 
             // Host side expects the first line from each guest to be handshake displayName.
             if role == .host && peer.peerName == nil {
-                peer.peerName = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                let acceptedGuests = hostConnections.values.filter { $0.peerName != nil }.count
+                if acceptedGuests >= Self.maxLobbyGuests {
+                    removeHostConnection(peer.connection)
+                    peer.connection.cancel()
+                    DispatchQueue.main.async {
+                        self.delegate?.lobbyServiceDidChangeConnectionState("Lobby full (6 players max)")
+                    }
+                    continue
+                }
+                peer.peerName = trimmed
                 notifyPeerListChanged()
                 DispatchQueue.main.async {
                     self.delegate?.lobbyServiceDidChangeConnectionState("\(peer.peerName ?? "Guest") joined")
@@ -317,6 +327,9 @@ final class LocalLobbyService: NSObject, LobbyService {
         guestConnection?.connection.cancel()
         guestConnection = nil
     }
+
+    /// Same-seat LAN lobby: host plus guests (six players total).
+    private static let maxLobbyGuests = 5
 
     private static func makeCode() -> String {
         let letters = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")

@@ -96,10 +96,24 @@ class LocalLobbyService(private val context: Context) : LobbyService {
 
     private fun handleIncomingConnection(socket: Socket) {
         try {
+            synchronized(hostConnections) {
+                if (hostConnections.size >= MAX_LOBBY_GUESTS) {
+                    runCatching { socket.close() }
+                    notifyMain { delegate?.onConnectionStateChanged("Lobby full (6 players max)") }
+                    return
+                }
+            }
             val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
             val peerName = reader.readLine() ?: return
             val conn = PeerConnection(socket, peerName)
-            synchronized(hostConnections) { hostConnections[peerName] = conn }
+            synchronized(hostConnections) {
+                if (hostConnections.size >= MAX_LOBBY_GUESTS) {
+                    runCatching { socket.close() }
+                    notifyMain { delegate?.onConnectionStateChanged("Lobby full (6 players max)") }
+                    return
+                }
+                hostConnections[peerName] = conn
+            }
 
             val peers = synchronized(hostConnections) {
                 hostConnections.values.map { LobbyPeer(it.name, it.name) }
@@ -300,6 +314,9 @@ class LocalLobbyService(private val context: Context) : LobbyService {
     }
 
     companion object {
+        /** Same-seat relay lobby: host + guests (six seats total). */
+        private const val MAX_LOBBY_GUESTS = 5
+
         private fun makeCode(): String {
             val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
             return (1..5).map { chars.random() }.joinToString("")

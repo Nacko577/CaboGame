@@ -91,7 +91,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             this@GameViewModel.peers = peers
             if (hostedCode != null) {
                 for (peer in peers) {
-                    if (engine.state.players.none { it.name == peer.displayName }) {
+                    if (engine.state.players.none { it.name == peer.displayName } && engine.state.players.size < 6) {
                         addRemotePlayer(peer.displayName)
                     }
                 }

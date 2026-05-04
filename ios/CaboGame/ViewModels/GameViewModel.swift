@@ -691,6 +691,7 @@ extension GameViewModel: LobbyServiceDelegate {
             self.peers = peers
             if self.hostedCode != nil {
                 for peer in peers where !self.engine.state.players.contains(where: { $0.name == peer.displayName }) {
+                    guard self.engine.state.players.count < 6 else { continue }
                     self.addRemotePlayer(name: peer.displayName)
                 }
                 self.gameState = self.engine.state

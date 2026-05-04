@@ -155,18 +155,33 @@ struct GameTableView: View {
         height: CGFloat
     ) -> some View {
         let boardW = width * 0.94
-        // Make the board taller so the N/S/E/W seats fit better.
-        let boardH = min(height * (compact ? 0.66 : 0.70), compact ? 520 : 560)
+        let tallBoard = opponents.count > 3
+        // Give extra vertical room when east/west each show two stacked seats.
+        let boardHCap: CGFloat = tallBoard ? (compact ? 560 : 600) : (compact ? 520 : 560)
+        let boardH = min(height * (compact ? 0.66 : 0.70), boardHCap)
 
-        // Seats: N/E/W/Opponents, S/local
-        let opp = Array(opponents.prefix(3))
-        let north = opp.count > 0 ? opp[0] : nil
-        let east = opp.count > 1 ? opp[1] : nil
-        let west = opp.count > 2 ? opp[2] : nil
+        // Seats: N + up to two on each side (E/W) + S/local.
+        let eastTop: Player?
+        let eastBottom: Player?
+        let westTop: Player?
+        let westBottom: Player?
+        if opponents.count > 3 {
+            eastTop = opponents.count > 1 ? opponents[1] : nil
+            eastBottom = opponents.count > 2 ? opponents[2] : nil
+            westTop = opponents.count > 3 ? opponents[3] : nil
+            westBottom = opponents.count > 4 ? opponents[4] : nil
+        } else {
+            eastTop = opponents.count > 1 ? opponents[1] : nil
+            eastBottom = nil
+            westTop = opponents.count > 2 ? opponents[2] : nil
+            westBottom = nil
+        }
+        let north = opponents.count > 0 ? opponents[0] : nil
         let south = localPlayer
 
-        // Player seat cards (shrunken to fit one-row layout for 4 cards).
-        let seatCardW: CGFloat = max(18, CGFloat(compact ? 26 : 30))
+        // Player seat cards (shrunken slightly when six seats share the rim).
+        let seatScale: CGFloat = opponents.count > 3 ? 0.92 : 1.0
+        let seatCardW: CGFloat = max(18, CGFloat(compact ? 26 : 30) * seatScale)
         let seatCardH: CGFloat = seatCardW * 1.35
 
         let padX = boardW * 0.08
@@ -189,11 +204,11 @@ struct GameTableView: View {
             // S (local) — name toward center, cards toward bottom edge
             seatView(player: south, isLocal: true, seatCardW: seatCardW, seatCardH: seatCardH, position: .south)
                 .position(x: boardW / 2, y: boardH - padY)
-            // E — inset from right rim; landscape stack + perpendicular symbols; name +180° from prior 90°
-            seatView(player: east, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .east)
+            // E — up to two stacked seats along the right rim
+            eastWestStack(top: eastTop, bottom: eastBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .east)
                 .position(x: boardW - padX - sideSeatInset, y: boardH / 2)
-            // W — inset from left rim
-            seatView(player: west, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .west)
+            // W — up to two stacked seats along the left rim
+            eastWestStack(top: westTop, bottom: westBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .west)
                 .position(x: padX + sideSeatInset, y: boardH / 2)
         }
         .frame(width: boardW, height: boardH)
@@ -217,6 +232,32 @@ struct GameTableView: View {
         /// Right edge: landscape stack; rotate face symbols so they’re perpendicular to the felt.
         case east
         case west
+    }
+
+    /// Up to two opponents stacked on the east or west rim (six-player table).
+    @ViewBuilder
+    private func eastWestStack(
+        top: Player?,
+        bottom: Player?,
+        seatCardW: CGFloat,
+        seatCardH: CGFloat,
+        position: TableSeatPosition
+    ) -> some View {
+        switch (top, bottom) {
+        case (nil, nil):
+            EmptyView()
+        case let (t?, b?):
+            VStack(spacing: 24) {
+                seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+                seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+            }
+        case let (t?, nil):
+            seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+        case let (nil, b?):
+            seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+        default:
+            EmptyView()
+        }
     }
 
     private func seatView(
@@ -251,9 +292,15 @@ struct GameTableView: View {
                         }
                     }
                 case .east:
-                    // Name at 270° (prior 90° + 180°). Symbols on landscape cards run perpendicular to the felt.
+                    // Name at 270°: pin label vertical center to the card column height so rims stay visually level.
+                    let colH = eastWestLandscapeColumnHeight(cardCount: indices.count, shortSide: seatCardW)
                     HStack(alignment: .center, spacing: 4) {
-                        nameLabel.rotationEffect(.degrees(270))
+                        VStack {
+                            Spacer(minLength: 0)
+                            nameLabel.rotationEffect(.degrees(270))
+                            Spacer(minLength: 0)
+                        }
+                        .frame(height: colH)
                         VStack(spacing: 2) {
                             ForEach(indices, id: \.self) { idx in
                                 sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .east)
@@ -261,13 +308,19 @@ struct GameTableView: View {
                         }
                     }
                 case .west:
+                    let colH = eastWestLandscapeColumnHeight(cardCount: indices.count, shortSide: seatCardW)
                     HStack(alignment: .center, spacing: 4) {
                         VStack(spacing: 2) {
                             ForEach(indices, id: \.self) { idx in
                                 sideSeatCard(idx: idx, player: player, isLocal: isLocal, seatCardW: seatCardW, seatCardH: seatCardH, edge: .west)
                             }
                         }
-                        nameLabel.rotationEffect(.degrees(90))
+                        VStack {
+                            Spacer(minLength: 0)
+                            nameLabel.rotationEffect(.degrees(90))
+                            Spacer(minLength: 0)
+                        }
+                        .frame(height: colH)
                     }
                 }
             } else {
@@ -282,6 +335,12 @@ struct GameTableView: View {
         }
         .frame(width: frameWidth(for: position, seatCardW: seatCardW, seatCardH: seatCardH),
                height: frameHeight(for: position, seatCardW: seatCardW, seatCardH: seatCardH))
+    }
+
+    /// Height of the vertical stack of landscape cards on east/west (`shortSide` = narrow card edge).
+    private func eastWestLandscapeColumnHeight(cardCount: Int, shortSide: CGFloat, spacing: CGFloat = 2) -> CGFloat {
+        guard cardCount > 0 else { return 0 }
+        return CGFloat(cardCount) * shortSide + CGFloat(max(0, cardCount - 1)) * spacing
     }
 
     private func frameWidth(for position: TableSeatPosition, seatCardW: CGFloat, seatCardH: CGFloat) -> CGFloat {
@@ -299,8 +358,7 @@ struct GameTableView: View {
         case .north, .south:
             return seatCardH + 4 + 14 // card row + spacing + name
         case .east, .west:
-            // Stack short edge (seatCardW) vertically
-            return seatCardW * 4 + 6
+            return eastWestLandscapeColumnHeight(cardCount: 4, shortSide: seatCardW)
         }
     }
 

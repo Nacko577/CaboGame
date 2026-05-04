@@ -9,6 +9,8 @@ const MISSED_HEARTBEATS_BEFORE_KILL = 4;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 5;
 const MAX_LOBBIES = 1024;
+/** Host + guests; engine supports six seats around the table. */
+const MAX_LOBBY_PLAYERS = 6;
 
 /**
  * @typedef {Object} Member
@@ -180,6 +182,10 @@ function handleJoin(ws, msg) {
   }
   if (!lobby.host) {
     sendError(ws, "Host left the lobby");
+    return;
+  }
+  if (lobby.guests.size >= MAX_LOBBY_PLAYERS - 1) {
+    sendError(ws, "Lobby full (6 players max)");
     return;
   }
 

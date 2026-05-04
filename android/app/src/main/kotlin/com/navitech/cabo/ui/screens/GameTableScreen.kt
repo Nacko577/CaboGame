@@ -129,7 +129,12 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     val screenWidthDp = configuration.screenWidthDp
     val screenHeightDp = configuration.screenHeightDp
     val compactBoard = screenHeightDp < 750
-    val boardHeightCapDp = if (compactBoard) 520 else 560
+    val tallBoard = opponents.size > 3
+    val boardHeightCapDp = if (tallBoard) {
+        if (compactBoard) 560 else 600
+    } else {
+        if (compactBoard) 520 else 560
+    }
     val boardH = min(
         (screenHeightDp * (if (compactBoard) 0.66f else 0.70f)).toInt(),
         boardHeightCapDp
@@ -219,9 +224,26 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
             }
 
             // Updated iOS-style board layout: N/S/E/W seats around a center table.
-            val north = opponents.getOrNull(0)
-            val east = opponents.getOrNull(1)
-            val west = opponents.getOrNull(2)
+            val opp = opponents
+            val north = opp.getOrNull(0)
+            val eastTop: Player?
+            val eastBottom: Player?
+            val westTop: Player?
+            val westBottom: Player?
+            if (opp.size > 3) {
+                eastTop = opp.getOrNull(1)
+                eastBottom = opp.getOrNull(2)
+                westTop = opp.getOrNull(3)
+                westBottom = opp.getOrNull(4)
+            } else {
+                eastTop = opp.getOrNull(1)
+                eastBottom = null
+                westTop = opp.getOrNull(2)
+                westBottom = null
+            }
+            val seatScale = if (opp.size > 3) 0.92f else 1f
+            val seatCardW = (32f * seatScale).dp
+            val seatCardH = (46f * seatScale).dp
 
             Box(
                 modifier = Modifier
@@ -293,14 +315,16 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
                     )
 
-                    // East — inset from table rim; landscape stack; name +180° from prior 90°
-                    SeatRow(
+                    // East — up to two stacked seats inset from the right rim
+                    SideSeatColumn(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
                             .padding(end = 20.dp),
-                        player = east,
-                        isLocal = false,
+                        top = eastTop,
+                        bottom = eastBottom,
                         tableSeat = TableSeatPosition.East,
+                        seatCardW = seatCardW,
+                        seatCardH = seatCardH,
                         kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
@@ -310,14 +334,16 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
                     )
 
-                    // West — inset from table rim
-                    SeatRow(
+                    // West — up to two stacked seats inset from the left rim
+                    SideSeatColumn(
                         modifier = Modifier
                             .align(Alignment.CenterStart)
                             .padding(start = 20.dp),
-                        player = west,
-                        isLocal = false,
+                        top = westTop,
+                        bottom = westBottom,
                         tableSeat = TableSeatPosition.West,
+                        seatCardW = seatCardW,
+                        seatCardH = seatCardH,
                         kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
@@ -603,6 +629,91 @@ private fun PortraitHandCards(
 }
 
 @Composable
+private fun SideSeatColumn(
+    modifier: Modifier = Modifier,
+    top: Player?,
+    bottom: Player?,
+    tableSeat: TableSeatPosition,
+    seatCardW: Dp,
+    seatCardH: Dp,
+    kingSwapOutlineFlashActive: Boolean,
+    viewModel: GameViewModel,
+    selectedOwnIndex: Int,
+    onSelectOwn: (Int) -> Unit,
+    selectedOpponentID: String?,
+    selectedOpponentIndex: Int,
+    onSelectOpponent: (String, Int) -> Unit,
+) {
+    when {
+        top != null && bottom != null -> Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SeatRow(
+                player = top,
+                isLocal = false,
+                tableSeat = tableSeat,
+                kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
+                viewModel = viewModel,
+                selectedOwnIndex = selectedOwnIndex,
+                onSelectOwn = onSelectOwn,
+                selectedOpponentID = selectedOpponentID,
+                selectedOpponentIndex = selectedOpponentIndex,
+                onSelectOpponent = onSelectOpponent,
+                seatCardW = seatCardW,
+                seatCardH = seatCardH,
+            )
+            SeatRow(
+                player = bottom,
+                isLocal = false,
+                tableSeat = tableSeat,
+                kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
+                viewModel = viewModel,
+                selectedOwnIndex = selectedOwnIndex,
+                onSelectOwn = onSelectOwn,
+                selectedOpponentID = selectedOpponentID,
+                selectedOpponentIndex = selectedOpponentIndex,
+                onSelectOpponent = onSelectOpponent,
+                seatCardW = seatCardW,
+                seatCardH = seatCardH,
+            )
+        }
+        top != null -> SeatRow(
+            modifier = modifier,
+            player = top,
+            isLocal = false,
+            tableSeat = tableSeat,
+            kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
+            viewModel = viewModel,
+            selectedOwnIndex = selectedOwnIndex,
+            onSelectOwn = onSelectOwn,
+            selectedOpponentID = selectedOpponentID,
+            selectedOpponentIndex = selectedOpponentIndex,
+            onSelectOpponent = onSelectOpponent,
+            seatCardW = seatCardW,
+            seatCardH = seatCardH,
+        )
+        bottom != null -> SeatRow(
+            modifier = modifier,
+            player = bottom,
+            isLocal = false,
+            tableSeat = tableSeat,
+            kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
+            viewModel = viewModel,
+            selectedOwnIndex = selectedOwnIndex,
+            onSelectOwn = onSelectOwn,
+            selectedOpponentID = selectedOpponentID,
+            selectedOpponentIndex = selectedOpponentIndex,
+            onSelectOpponent = onSelectOpponent,
+            seatCardW = seatCardW,
+            seatCardH = seatCardH,
+        )
+        else -> Box(modifier = modifier) {}
+    }
+}
+
+@Composable
 private fun SeatRow(
     modifier: Modifier = Modifier,
     player: Player?,
@@ -614,7 +725,9 @@ private fun SeatRow(
     onSelectOwn: (Int) -> Unit,
     selectedOpponentID: String?,
     selectedOpponentIndex: Int,
-    onSelectOpponent: (String, Int) -> Unit
+    onSelectOpponent: (String, Int) -> Unit,
+    seatCardW: Dp = 32.dp,
+    seatCardH: Dp = 46.dp,
 ) {
     if (player == null) {
         Column(
@@ -629,8 +742,6 @@ private fun SeatRow(
     val isTurn = viewModel.gameState.currentPlayerID == player.id
     val nameColor = if (isLocal) Color(0xFFF2BF4D) else if (isTurn) Color(0xFF4CAF50) else Color.White
     val label = if (isLocal) "You" else player.name
-    val seatCardW = 32.dp
-    val seatCardH = 46.dp
     val (cardW, cardH) = when (tableSeat) {
         TableSeatPosition.East, TableSeatPosition.West -> seatCardH to seatCardW // landscape: long edge toward table center
         else -> seatCardW to seatCardH
@@ -640,6 +751,8 @@ private fun SeatRow(
         TableSeatPosition.West -> -90f
         else -> 0f
     }
+    val handLen = min(4, player.hand.size).coerceAtLeast(1)
+    val landscapeColumnHeight = seatCardW * handLen + (2.dp * maxOf(0, handLen - 1))
     @Composable
     fun seatName(rotMod: Modifier) {
         Text(
@@ -690,7 +803,13 @@ private fun SeatRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            seatName(Modifier.rotate(270f))
+            Column(
+                modifier = Modifier.height(landscapeColumnHeight),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                seatName(Modifier.rotate(270f))
+            }
             cards()
         }
         TableSeatPosition.West -> Row(
@@ -699,7 +818,13 @@ private fun SeatRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             cards()
-            seatName(Modifier.rotate(90f))
+            Column(
+                modifier = Modifier.height(landscapeColumnHeight),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                seatName(Modifier.rotate(90f))
+            }
         }
     }
 }
