@@ -4,15 +4,15 @@
     "type": "LINKED_RESOURCES_BINARY_FORMAT",
     "kind": "Directory"
   },
-  "applicationId": "com.alex.cabogame",
+  "applicationId": "com.navitech.cabo",
   "variantName": "debug",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 1,
-      "versionName": "1.0",
+      "versionCode": 3,
+      "versionName": "1.0.2",
       "outputFile": "linked-resources-binary-format-debug.ap_"
     }
   ],

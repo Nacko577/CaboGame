@@ -123,6 +123,7 @@ final class GameViewModel: ObservableObject {
             try engine.startGame()
             gameState = engine.state
             clearTurnFeedback()
+            clearSpecialPeekFeedback()
             initialPeekGraceTask?.cancel()
             initialPeekGraceTask = nil
             turnTimerTask?.cancel()
@@ -625,6 +626,16 @@ extension GameViewModel: LobbyServiceDelegate {
                 self.engine.load(state: incoming)
                 if self.localPlayerID == nil {
                     self.localPlayerID = self.identifyLocalPlayer(in: incoming)?.id
+                }
+                if incoming.phase == .initialPeek {
+                    self.clearSpecialPeekFeedback()
+                    let pid = self.localPlayerID ?? self.identifyLocalPlayer(in: incoming)?.id
+                    if let pid,
+                       let pi = incoming.players.firstIndex(where: { $0.id == pid }),
+                       incoming.initialPeekedIndicesByPlayerIndex.indices.contains(pi) {
+                        let serverPeeks = Set(incoming.initialPeekedIndicesByPlayerIndex[pi])
+                        self.initialPeekedOwnIndices = self.initialPeekedOwnIndices.union(serverPeeks)
+                    }
                 }
                 if incoming.currentPlayerID != self.localPlayerID,
                    incoming.phase != .initialPeek {

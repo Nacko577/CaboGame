@@ -186,10 +186,19 @@ struct LobbyView: View {
                             Button(action: { viewModel.joinLobby() }) {
                                 Text("Join")
                                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(Color(red: 0.06, green: 0.10, blue: 0.08))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 44)
-                                    .background(Color(red: 0.55, green: 0.75, blue: 0.95).opacity(0.25))
+                                    .background(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 158.0 / 255.0, green: 200.0 / 255.0, blue: 246.0 / 255.0),
+                                                Color(red: 107.0 / 255.0, green: 158.0 / 255.0, blue: 227.0 / 255.0)
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 10)

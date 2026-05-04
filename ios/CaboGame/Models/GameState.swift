@@ -1,5 +1,12 @@
 import Foundation
 
+struct KingSwapHighlight: Codable, Equatable {
+    var fromPlayerID: UUID
+    var fromHandIndex: Int
+    var toPlayerID: UUID
+    var toHandIndex: Int
+}
+
 struct GameState: Codable {
     var players: [Player]
     var deck: [Card]
@@ -20,6 +27,8 @@ struct GameState: Codable {
     /// `nil` outside of main play (initial peek phase, game over, or before
     /// the first turn begins).
     var currentTurnEndsAt: Date?
+    /// When non-nil, clients outline these two hand slots after a King swap.
+    var kingSwapHighlight: KingSwapHighlight?
 
     init(players: [Player] = []) {
         self.players = players
@@ -37,6 +46,7 @@ struct GameState: Codable {
         self.playersFinishedInitialPeek = 0
         self.initialPeekGraceEndsAt = nil
         self.currentTurnEndsAt = nil
+        self.kingSwapHighlight = nil
     }
 
     var currentPlayerID: UUID? {

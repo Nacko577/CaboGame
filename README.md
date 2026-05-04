@@ -13,7 +13,7 @@ iOS + Android Cabo with:
 ## Project Layout
 
 - `ios/CaboGame/` Swift sources for the iOS app
-- `android/app/src/main/kotlin/com/alex/cabogame/` Kotlin sources for the Android app
+- `android/app/src/main/kotlin/com/navitech/cabo/` Kotlin sources for the Android app
 - `server/` Tiny Node.js + WebSocket relay server (so friends can play across networks)
 
 Inside each app:
@@ -57,7 +57,7 @@ After deploying, plug the `wss://` URL into both apps:
   xcrun simctl spawn booted defaults write com.navitech.cabo cabogame.serverURL "wss://your-server/ws"
   ```
 - **Android:** edit `DEFAULT_PRODUCTION_URL` in
-  [`android/app/src/main/kotlin/com/alex/cabogame/networking/ServerConfig.kt`](android/app/src/main/kotlin/com/alex/cabogame/networking/ServerConfig.kt).
+  [`android/app/src/main/kotlin/com/navitech/cabo/networking/ServerConfig.kt`](android/app/src/main/kotlin/com/navitech/cabo/networking/ServerConfig.kt).
 
 The lobby screen has an **Online / Same Wi-Fi** toggle. Online uses the relay
 server above; Same Wi-Fi uses the existing peer-to-peer transport.

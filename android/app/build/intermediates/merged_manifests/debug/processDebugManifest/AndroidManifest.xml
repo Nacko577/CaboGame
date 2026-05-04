@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.alex.cabogame"
-    android:versionCode="1"
-    android:versionName="1.0" >
+    package="com.navitech.cabo"
+    android:versionCode="3"
+    android:versionName="1.0.2" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -14,14 +14,15 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <permission
-        android:name="com.alex.cabogame.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:name="com.navitech.cabo.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         android:protectionLevel="signature" />
 
-    <uses-permission android:name="com.alex.cabogame.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+    <uses-permission android:name="com.navitech.cabo.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 
     <application
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
+        android:enableOnBackInvokedCallback="true"
         android:extractNativeLibs="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -30,7 +31,7 @@
         android:testOnly="true"
         android:theme="@style/Theme.CaboGame" >
         <activity
-            android:name="com.alex.cabogame.MainActivity"
+            android:name="com.navitech.cabo.MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize" >
             <intent-filter>
@@ -42,7 +43,7 @@
 
         <provider
             android:name="androidx.startup.InitializationProvider"
-            android:authorities="com.alex.cabogame.androidx-startup"
+            android:authorities="com.navitech.cabo.androidx-startup"
             android:exported="false" >
             <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"

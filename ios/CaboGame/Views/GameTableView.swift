@@ -306,6 +306,12 @@ struct GameTableView: View {
             .minimumScaleFactor(0.7)
     }
 
+    private func isKingSwapHighlighted(playerID: UUID, index: Int) -> Bool {
+        guard let h = viewModel.gameState.kingSwapHighlight else { return false }
+        return (h.fromPlayerID == playerID && h.fromHandIndex == index)
+            || (h.toPlayerID == playerID && h.toHandIndex == index)
+    }
+
     private func sideSeatCard(idx: Int, player: Player, isLocal: Bool, seatCardW: CGFloat, seatCardH: CGFloat, edge: SideSeatEdge) -> some View {
         let card = player.hand[idx]
         let revealedBase = isLocal ? shouldRevealOwnCard(at: idx) : shouldRevealOpponentCard(playerID: player.id, at: idx)
@@ -327,6 +333,7 @@ struct GameTableView: View {
             isSelected: isLocal
                 ? (idx == selectedOwnIndex)
                 : (selectedOpponentID == player.id && selectedOpponentIndex == idx),
+            kingSwapHighlight: isKingSwapHighlighted(playerID: player.id, index: idx),
             width: w,
             height: h,
             faceTextRotation: faceTextRotation
@@ -391,7 +398,8 @@ struct GameTableView: View {
     private func opponentCard(player: Player, index: Int, w: CGFloat, h: CGFloat) -> some View {
         let card = player.hand[index]
         let revealed = shouldRevealOpponentCard(playerID: player.id, at: index) || viewModel.gameState.winnerID != nil
-        return cardView(text: card?.shortName ?? "", isFaceUp: card != nil && revealed, isEmpty: card == nil, isSelected: selectedOpponentID == player.id && selectedOpponentIndex == index, width: w, height: h)
+        let kingSwap = isKingSwapHighlighted(playerID: player.id, index: index)
+        return cardView(text: card?.shortName ?? "", isFaceUp: card != nil && revealed, isEmpty: card == nil, isSelected: selectedOpponentID == player.id && selectedOpponentIndex == index, kingSwapHighlight: kingSwap, width: w, height: h)
             .onTapGesture { selectedOpponentID = player.id; selectedOpponentIndex = index }
     }
 
@@ -438,7 +446,8 @@ struct GameTableView: View {
                     ForEach(me.hand.indices, id: \.self) { idx in
                         let card = me.hand[idx]
                         let revealed = shouldRevealOwnCard(at: idx) || viewModel.gameState.winnerID != nil
-                        cardView(text: card?.shortName ?? "", isFaceUp: card != nil && revealed, isEmpty: card == nil, isSelected: idx == selectedOwnIndex, width: myW, height: myH)
+                        let kingSwap = isKingSwapHighlighted(playerID: me.id, index: idx)
+                        cardView(text: card?.shortName ?? "", isFaceUp: card != nil && revealed, isEmpty: card == nil, isSelected: idx == selectedOwnIndex, kingSwapHighlight: kingSwap, width: myW, height: myH)
                             .onTapGesture { selectedOwnIndex = idx }
                             .onTapGesture(count: 2) { tryPeekOwnCard(at: idx) }
                     }
@@ -591,10 +600,13 @@ struct GameTableView: View {
         }.buttonStyle(.plain)
     }
 
-    private func cardView(text: String, isFaceUp: Bool, isEmpty: Bool, isSelected: Bool, width: CGFloat, height: CGFloat, faceTextRotation: Angle = .zero) -> some View {
+    private func cardView(text: String, isFaceUp: Bool, isEmpty: Bool, isSelected: Bool, kingSwapHighlight: Bool = false, width: CGFloat, height: CGFloat, faceTextRotation: Angle = .zero) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5).fill(isEmpty ? Color.white.opacity(0.05) : (isFaceUp ? .white : cardBack))
-            RoundedRectangle(cornerRadius: 5).stroke(isSelected ? accentGold : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 0.8)
+            RoundedRectangle(cornerRadius: 5).stroke(
+                kingSwapHighlight ? Color.red.opacity(0.95) : (isSelected ? accentGold : Color.white.opacity(0.2)),
+                lineWidth: kingSwapHighlight ? 2.8 : (isSelected ? 2 : 0.8)
+            )
             if isEmpty {
                 RoundedRectangle(cornerRadius: 4).stroke(style: StrokeStyle(lineWidth: 0.8, dash: [3, 3])).foregroundColor(.white.opacity(0.2)).padding(3)
             } else if isFaceUp {

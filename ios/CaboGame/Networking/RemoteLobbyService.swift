@@ -3,6 +3,11 @@ import Foundation
 /// LobbyService implementation that talks to the Node.js relay server over
 /// WebSockets. All app-level game logic remains host-authoritative; this
 /// transport just routes JSON messages between the host and guests.
+///
+/// Proxies and cellular networks often tear down idle sockets ("Software caused
+/// connection abort"). We send periodic JSON `ping` messages (server replies with
+/// `pong`), and reconnect automatically. Hosts reclaim the same lobby using
+/// `resumeCode` after the relay briefly keeps the room alive without a host socket.
 final class RemoteLobbyService: NSObject, LobbyService {
     weak var delegate: LobbyServiceDelegate?
     private(set) var joinCode: String?
@@ -10,12 +15,18 @@ final class RemoteLobbyService: NSObject, LobbyService {
     private let serverURL: URL
     private var role: LobbyRole?
     private var localDisplayName: String = ""
+    /// Join code the guest entered (kept across reconnects).
+    private var guestLobbyCode: String?
+    /// Authoritative code for this hosting session (survives transport teardown).
+    private var hostLobbyCode: String?
     private var session: URLSession?
     private var task: URLSessionWebSocketTask?
     private var didOpen = false
-    private var pendingHost = false
-    private var pendingJoinCode: String?
     private var peerNames: [String: String] = [:]
+    private var intentionalDisconnect = false
+    private var reconnectWorkItem: DispatchWorkItem?
+    private var keepAliveTimer: Timer?
+    private var reconnectDelay: TimeInterval = 0.5
 
     init(serverURL: URL = ServerConfig.current) {
         self.serverURL = serverURL
@@ -23,28 +34,32 @@ final class RemoteLobbyService: NSObject, LobbyService {
     }
 
     func startHosting(displayName: String) throws {
-        cleanup()
+        intentionalDisconnect = false
+        cancelReconnectAndKeepAlive()
+        teardownTransport(preserveLobbyState: false)
         role = .host
         localDisplayName = displayName
-        pendingHost = true
-        pendingJoinCode = nil
+        guestLobbyCode = nil
         notify("Connecting to server...")
-        connect()
+        openSocket()
     }
 
     func startJoining(displayName: String, code: String) throws {
-        cleanup()
+        intentionalDisconnect = false
+        cancelReconnectAndKeepAlive()
+        teardownTransport(preserveLobbyState: false)
         role = .guest
         localDisplayName = displayName
-        pendingHost = false
-        pendingJoinCode = code.uppercased()
+        guestLobbyCode = code.uppercased()
         notify("Connecting to server...")
-        connect()
+        openSocket()
     }
 
     func stop() {
+        intentionalDisconnect = true
+        cancelReconnectAndKeepAlive()
         sendControl(["type": "leave"])
-        cleanup()
+        teardownTransport(preserveLobbyState: false)
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.lobbyServiceDidUpdateJoinCode(nil)
         }
@@ -66,8 +81,10 @@ final class RemoteLobbyService: NSObject, LobbyService {
         }
     }
 
-    private func connect() {
+    private func openSocket() {
+        guard !intentionalDisconnect else { return }
         let config = URLSessionConfiguration.default
+        config.waitsForConnectivity = true
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         let task = session.webSocketTask(with: serverURL)
         self.session = session
@@ -98,12 +115,67 @@ final class RemoteLobbyService: NSObject, LobbyService {
     }
 
     private func handleSocketFailure(_ error: Error) {
+        if intentionalDisconnect { return }
         let nsError = error as NSError
-        // POSIX 53 (connection reset) / 57 (not connected) just mean we closed; ignore noise.
+        // Still reconnect — these often follow an aborted relay/proxy connection.
         if nsError.domain == NSPOSIXErrorDomain, nsError.code == 53 || nsError.code == 57 {
+            notify("Reconnecting…")
+            teardownTransport(preserveLobbyState: true)
+            scheduleReconnect()
             return
         }
-        notify("Disconnected: \(error.localizedDescription)")
+        notify("Reconnecting…")
+        teardownTransport(preserveLobbyState: true)
+        scheduleReconnect()
+    }
+
+    private func scheduleReconnect() {
+        guard !intentionalDisconnect, role != nil else { return }
+        reconnectWorkItem?.cancel()
+        let delay = reconnectDelay
+        reconnectDelay = min(reconnectDelay * 2, 30)
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.intentionalDisconnect else { return }
+            self.openSocket()
+        }
+        reconnectWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    private func cancelReconnectAndKeepAlive() {
+        reconnectWorkItem?.cancel()
+        reconnectWorkItem = nil
+        keepAliveTimer?.invalidate()
+        keepAliveTimer = nil
+    }
+
+    private func startKeepAlive() {
+        keepAliveTimer?.invalidate()
+        keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
+            guard let self, !self.intentionalDisconnect else { return }
+            self.sendControl(["type": "ping"])
+        }
+        keepAliveTimer?.tolerance = 2
+        if let timer = keepAliveTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func sendHandshake() {
+        switch role {
+        case .host:
+            let resume = hostLobbyCode ?? joinCode
+            if let resume {
+                sendControl(["type": "host", "name": localDisplayName, "resumeCode": resume])
+            } else {
+                sendControl(["type": "host", "name": localDisplayName])
+            }
+        case .guest:
+            guard let code = guestLobbyCode else { return }
+            sendControl(["type": "join", "name": localDisplayName, "code": code])
+        case .none:
+            break
+        }
     }
 
     private func handleIncomingText(_ text: String) {
@@ -114,7 +186,12 @@ final class RemoteLobbyService: NSObject, LobbyService {
         switch type {
         case "hosted":
             let code = (raw["code"] as? String) ?? ""
+            let previous = joinCode
+            hostLobbyCode = code
             joinCode = code
+            if let previous, previous != code {
+                notify("Game code changed to \(code) — deploy the latest relay to keep the same room after drops.")
+            }
             DispatchQueue.main.async { [weak self] in
                 self?.delegate?.lobbyServiceDidUpdateJoinCode(code)
             }
@@ -139,8 +216,15 @@ final class RemoteLobbyService: NSObject, LobbyService {
             peerNames.removeValue(forKey: id)
             broadcastPeerListIfHost()
             notify("\(name) disconnected")
+        case "hostReconnecting":
+            notify("Host reconnecting…")
         case "hostLeft":
-            cleanup()
+            intentionalDisconnect = true
+            cancelReconnectAndKeepAlive()
+            teardownTransport(preserveLobbyState: false)
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.lobbyServiceDidUpdateJoinCode(nil)
+            }
             notify("Host left the lobby")
         case "relay":
             let from = (raw["from"] as? String) ?? "peer"
@@ -182,21 +266,20 @@ final class RemoteLobbyService: NSObject, LobbyService {
         }
     }
 
-    private func cleanup() {
-        // invalidateAndCancel() cancels every outstanding task on this session
-        // and releases the delegate. Calling task.cancel(with:reason:) on a
-        // task that hasn't fully connected yet can trip Foundation's
-        // "invalid reuse after initialization" guard, so we let the session
-        // handle teardown.
+    /// Tear down the URLSession / socket. Optionally keep `joinCode`, `role`,
+    /// `guestLobbyCode`, and `peerNames` so we can reconnect.
+    private func teardownTransport(preserveLobbyState: Bool) {
         session?.invalidateAndCancel()
         session = nil
         task = nil
         didOpen = false
-        pendingHost = false
-        pendingJoinCode = nil
-        joinCode = nil
-        role = nil
-        peerNames = [:]
+        if !preserveLobbyState {
+            joinCode = nil
+            hostLobbyCode = nil
+            role = nil
+            guestLobbyCode = nil
+            peerNames = [:]
+        }
     }
 }
 
@@ -204,20 +287,27 @@ extension RemoteLobbyService: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession,
                     webSocketTask: URLSessionWebSocketTask,
                     didOpenWithProtocol protocol: String?) {
+        guard webSocketTask === task else { return }
         didOpen = true
-        if pendingHost {
-            sendControl(["type": "host", "name": localDisplayName])
-        } else if let code = pendingJoinCode {
-            sendControl(["type": "join", "name": localDisplayName, "code": code])
-        }
-        pendingHost = false
-        pendingJoinCode = nil
+        reconnectWorkItem?.cancel()
+        reconnectWorkItem = nil
+        reconnectDelay = 0.5
+        sendHandshake()
+        startKeepAlive()
     }
 
     func urlSession(_ session: URLSession,
                     webSocketTask: URLSessionWebSocketTask,
                     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
                     reason: Data?) {
-        notify("Disconnected")
+        guard webSocketTask === task else { return }
+        if intentionalDisconnect {
+            notify("Disconnected")
+            return
+        }
+        cancelReconnectAndKeepAlive()
+        teardownTransport(preserveLobbyState: true)
+        notify("Reconnecting…")
+        scheduleReconnect()
     }
 }

@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.alex.cabogame.app-mergeDebugResources-44:/values-fr/values-fr.xml",
+            "outputFile": "com.navitech.cabo.app-mergeDebugResources-44:/values-fr/values-fr.xml",
             "map": [
                 {
                     "source": "/Users/alex/.gradle/caches/8.13/transforms/2b5e8ab0139ccea9e8f9703c8c093a2b/transformed/material3-release/res/values-fr/values-fr.xml",

@@ -64,6 +64,7 @@ struct CaboGameEngine {
         state.playersFinishedInitialPeek = 0
         state.initialPeekGraceEndsAt = Date().addingTimeInterval(15)
         state.currentTurnEndsAt = nil
+        state.kingSwapHighlight = nil
         state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
 
         for idx in state.players.indices {
@@ -117,6 +118,7 @@ struct CaboGameEngine {
         state.initialPeekedIndicesByPlayerIndex = Array(repeating: [], count: state.players.count)
         state.playersFinishedInitialPeek = 0
         state.initialPeekGraceEndsAt = nil
+        state.kingSwapHighlight = nil
         startTurnTimer(now: now)
     }
 
@@ -158,6 +160,7 @@ struct CaboGameEngine {
     mutating func attemptMatchDiscard(playerID: UUID, handIndex: Int) throws -> Bool {
         guard state.winnerID == nil else { throw GameRuleError.roundFinished }
         guard state.phase != .initialPeek else { throw GameRuleError.invalidPhase }
+        state.kingSwapHighlight = nil
         guard let topDiscard = state.discardPile.last else { throw GameRuleError.noDiscardCard }
 
         let playerIndex = try indexOfPlayer(playerID)
@@ -194,6 +197,7 @@ struct CaboGameEngine {
     mutating func drawCard(for playerID: UUID, source: DrawSource) throws -> Card {
         try validateTurn(for: playerID)
         guard state.phase == .waitingForDraw else { throw GameRuleError.invalidPhase }
+        state.kingSwapHighlight = nil
 
         let card: Card
         switch source {
@@ -215,6 +219,7 @@ struct CaboGameEngine {
         try validateTurn(for: playerID)
         guard state.phase == .waitingForPlacementOrDiscard else { throw GameRuleError.invalidPhase }
         guard let pending = state.pendingDraw else { throw GameRuleError.noPendingDraw }
+        state.kingSwapHighlight = nil
 
         let playerIndex = try indexOfPlayer(playerID)
         guard state.players[playerIndex].hand.indices.contains(handIndex) else {
@@ -236,6 +241,7 @@ struct CaboGameEngine {
         guard state.phase == .waitingForPlacementOrDiscard else { throw GameRuleError.invalidPhase }
         guard let pending = state.pendingDraw else { throw GameRuleError.noPendingDraw }
 
+        state.kingSwapHighlight = nil
         state.discardPile.append(pending.card)
         state.pendingDraw = nil
 
@@ -251,6 +257,7 @@ struct CaboGameEngine {
     mutating func resolveSpecialAction(for playerID: UUID, action: SpecialAction) throws {
         try validateTurn(for: playerID)
         guard state.phase == .waitingForSpecialResolution else { throw GameRuleError.invalidPhase }
+        state.kingSwapHighlight = nil
 
         guard let top = state.discardPile.last else { throw GameRuleError.noDiscardCard }
         switch (top.rank, action) {
@@ -293,6 +300,12 @@ struct CaboGameEngine {
             let tmp = state.players[fromIdx].hand[fromCardIndex]
             state.players[fromIdx].hand[fromCardIndex] = state.players[toIdx].hand[toCardIndex]
             state.players[toIdx].hand[toCardIndex] = tmp
+            state.kingSwapHighlight = KingSwapHighlight(
+                fromPlayerID: fromPlayerID,
+                fromHandIndex: fromCardIndex,
+                toPlayerID: toPlayerID,
+                toHandIndex: toCardIndex
+            )
 
         default:
             throw GameRuleError.invalidSpecialCard
@@ -308,6 +321,7 @@ struct CaboGameEngine {
         guard state.caboCallerID == nil else { throw GameRuleError.caboAlreadyCalled }
 
         state.caboCallerID = playerID
+        state.kingSwapHighlight = nil
         endTurn()
     }
 
@@ -361,6 +375,7 @@ struct CaboGameEngine {
         state.phase = .waitingForDraw
         state.pendingDraw = nil
         state.currentTurnEndsAt = nil
+        state.kingSwapHighlight = nil
     }
 
     private func indexOfPlayer(_ playerID: UUID) throws -> Int {

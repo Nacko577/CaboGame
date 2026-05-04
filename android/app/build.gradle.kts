@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,21 +7,40 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
 android {
-    namespace = "com.alex.cabogame"
+    namespace = "com.navitech.cabo"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.alex.cabogame"
+        applicationId = "com.navitech.cabo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.0.2"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (!keystorePropertiesFile.exists()) return@create
+            keyAlias = keystoreProperties.getProperty("keyAlias") ?: return@create
+            keyPassword = keystoreProperties.getProperty("keyPassword") ?: return@create
+            storeFile = rootProject.file(keystoreProperties.getProperty("storeFile") ?: return@create)
+            storePassword = keystoreProperties.getProperty("storePassword") ?: return@create
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

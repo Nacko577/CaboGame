@@ -112,6 +112,14 @@ struct WireGameState: Codable {
     let playersFinishedInitialPeek: Int
     let initialPeekGraceEndsAt: Int64?
     let currentTurnEndsAt: Int64?
+    let kingSwapHighlight: WireKingSwapHighlight?
+}
+
+struct WireKingSwapHighlight: Codable {
+    let fromPlayerID: String
+    let fromHandIndex: Int
+    let toPlayerID: String
+    let toHandIndex: Int
 }
 
 struct WirePlayer: Codable {
@@ -324,6 +332,14 @@ extension WireGameState {
         self.playersFinishedInitialPeek = app.playersFinishedInitialPeek
         self.initialPeekGraceEndsAt = app.initialPeekGraceEndsAt.map { Int64($0.timeIntervalSince1970 * 1000) }
         self.currentTurnEndsAt = app.currentTurnEndsAt.map { Int64($0.timeIntervalSince1970 * 1000) }
+        self.kingSwapHighlight = app.kingSwapHighlight.map {
+            WireKingSwapHighlight(
+                fromPlayerID: $0.fromPlayerID.wireString,
+                fromHandIndex: $0.fromHandIndex,
+                toPlayerID: $0.toPlayerID.wireString,
+                toHandIndex: $0.toHandIndex
+            )
+        }
     }
 
     func toAppState() -> GameState {
@@ -342,6 +358,16 @@ extension WireGameState {
         state.playersFinishedInitialPeek = playersFinishedInitialPeek
         state.initialPeekGraceEndsAt = initialPeekGraceEndsAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
         state.currentTurnEndsAt = currentTurnEndsAt.map { Date(timeIntervalSince1970: TimeInterval($0) / 1000) }
+        state.kingSwapHighlight = kingSwapHighlight.flatMap { wire in
+            guard let from = UUID(uuidString: wire.fromPlayerID),
+                  let to = UUID(uuidString: wire.toPlayerID) else { return nil }
+            return KingSwapHighlight(
+                fromPlayerID: from,
+                fromHandIndex: wire.fromHandIndex,
+                toPlayerID: to,
+                toHandIndex: wire.toHandIndex
+            )
+        }
         return state
     }
 }
