@@ -35,6 +35,8 @@ final class GameViewModel: ObservableObject {
     @Published var matchAttemptOwnCard: Card?
     @Published var matchAttemptTopDiscardCard: Card?
     @Published var lastError: String?
+    /// True after the local player guesses Match wrong; clears when the discard pile changes or the round resets.
+    @Published private(set) var isMatchDisabledAfterWrongGuess = false
 
     private var lobby: LobbyService
     private var engine = CaboGameEngine()
@@ -43,6 +45,12 @@ final class GameViewModel: ObservableObject {
     private var specialPeekClearTask: Task<Void, Never>?
     private var matchStatusClearTask: Task<Void, Never>?
     private var pendingHostStart: Bool = false
+    /// Wrong Match locks further Match presses until the discard pile changes (same count + top card id).
+    private var matchDiscardWrongLocked = false
+    private var matchDiscardLockBaseline: (count: Int, topCardID: UUID?)?
+    /// Guest: first authoritative state after sending Match — infer wrong if discard unchanged.
+    private var matchAwaitingDiscardOutcome = false
+    private var matchAwaitingDiscardBaseline: (count: Int, topCardID: UUID?)?
     /// The displayName captured at the moment the user tapped Host or Join.
     /// Used to match ourselves in the host's player list, so editing the name
     /// field after entering the lobby doesn't break self-identification.
@@ -116,10 +124,12 @@ final class GameViewModel: ObservableObject {
         sessionDisplayName = nil
         localPlayerID = nil
         gameState = GameState()
+        resetMatchDiscardWrongGuessLock()
     }
 
     func startGameAsHost() {
         do {
+            resetMatchDiscardWrongGuessLock()
             try engine.startGame()
             gameState = engine.state
             clearTurnFeedback()
@@ -207,6 +217,7 @@ final class GameViewModel: ObservableObject {
 
     func attemptMatchDiscard(withOwnCardAt index: Int) {
         guard let playerID = localPlayerID else { return }
+        let stateBefore = gameState
         do {
             if let me = gameState.players.first(where: { $0.id == playerID }),
                me.hand.indices.contains(index),
@@ -219,13 +230,20 @@ final class GameViewModel: ObservableObject {
                 let wasCurrentTurn = gameState.currentPlayerID == playerID
                 let matched = try engine.attemptMatchDiscard(playerID: playerID, handIndex: index)
                 gameState = engine.state
+                if !matched {
+                    applyWrongMatchLock(discardBaselineFrom: gameState)
+                }
                 matchDiscardStatusText = matchStatusText(matched: matched, wasCurrentTurn: wasCurrentTurn)
                 scheduleMatchDiscardClear()
                 try lobby.send(.gameState(gameState))
             } else {
+                matchAwaitingDiscardOutcome = true
+                matchAwaitingDiscardBaseline = discardSignature(stateBefore)
                 try lobby.send(.playerAction(.attemptMatchDiscard(playerID: playerID, index: index)))
             }
         } catch {
+            matchAwaitingDiscardOutcome = false
+            matchAwaitingDiscardBaseline = nil
             lastError = error.localizedDescription
         }
     }
@@ -339,14 +357,75 @@ final class GameViewModel: ObservableObject {
          .filter { !$0.isEmpty }
 
         for candidate in candidates {
-            if let match = incoming.players.first(where: {
+            let matches = incoming.players.filter {
                 $0.name.trimmingCharacters(in: .whitespacesAndNewlines)
                     .caseInsensitiveCompare(candidate) == .orderedSame
-            }) {
-                return match
+            }
+            switch matches.count {
+            case 0:
+                continue
+            case 1:
+                return matches[0]
+            default:
+                if let id = localPlayerID, let kept = matches.first(where: { $0.id == id }) {
+                    return kept
+                }
+                return matches.last
             }
         }
         return nil
+    }
+
+    /// Keeps `localPlayerID` aligned with authoritative `GameState` (wire decode fixes,
+    /// rematches, duplicate names). Mirrors Android `GameTableScreen` fallbacks.
+    private func reconcileLocalPlayerID(with incoming: GameState) {
+        if let id = localPlayerID,
+           incoming.players.contains(where: { $0.id == id }) {
+            return
+        }
+        localPlayerID = identifyLocalPlayer(in: incoming)?.id ?? incoming.players.last?.id
+    }
+
+    private func discardSignature(_ state: GameState) -> (count: Int, topCardID: UUID?) {
+        let d = state.discardPile
+        return (d.count, d.last?.id)
+    }
+
+    private func applyWrongMatchLock(discardBaselineFrom state: GameState) {
+        let baseline = discardSignature(state)
+        matchDiscardWrongLocked = true
+        matchDiscardLockBaseline = baseline
+        isMatchDisabledAfterWrongGuess = true
+    }
+
+    private func clearWrongMatchLockIfDiscardMoved(with incoming: GameState) {
+        guard matchDiscardWrongLocked,
+              let baseline = matchDiscardLockBaseline else { return }
+        if discardSignature(incoming) != baseline {
+            matchDiscardWrongLocked = false
+            matchDiscardLockBaseline = nil
+            isMatchDisabledAfterWrongGuess = false
+        }
+    }
+
+    private func resolvePendingMatchDiscardOutcome(with incoming: GameState) {
+        guard matchAwaitingDiscardOutcome else { return }
+        matchAwaitingDiscardOutcome = false
+        guard let pending = matchAwaitingDiscardBaseline else { return }
+        matchAwaitingDiscardBaseline = nil
+        if discardSignature(incoming) == pending {
+            matchDiscardWrongLocked = true
+            matchDiscardLockBaseline = pending
+            isMatchDisabledAfterWrongGuess = true
+        }
+    }
+
+    private func resetMatchDiscardWrongGuessLock() {
+        matchDiscardWrongLocked = false
+        matchDiscardLockBaseline = nil
+        matchAwaitingDiscardOutcome = false
+        matchAwaitingDiscardBaseline = nil
+        isMatchDisabledAfterWrongGuess = false
     }
 
     private func resetForLobbyAsHost() {
@@ -450,6 +529,9 @@ final class GameViewModel: ObservableObject {
             if playerID == localPlayerID {
                 matchDiscardStatusText = matchStatusText(matched: matched, wasCurrentTurn: wasCurrentTurn)
                 scheduleMatchDiscardClear()
+                if !matched {
+                    applyWrongMatchLock(discardBaselineFrom: engine.state)
+                }
             }
         case .draw(let playerID, let source):
             let card = try engine.drawCard(for: playerID, source: source)
@@ -622,11 +704,14 @@ extension GameViewModel: LobbyServiceDelegate {
             case .lobbyState:
                 break
             case .gameState(let incoming):
+                if incoming.winnerID != nil || incoming.phase == .initialPeek {
+                    self.resetMatchDiscardWrongGuessLock()
+                }
+                self.resolvePendingMatchDiscardOutcome(with: incoming)
+                self.clearWrongMatchLockIfDiscardMoved(with: incoming)
                 self.gameState = incoming
                 self.engine.load(state: incoming)
-                if self.localPlayerID == nil {
-                    self.localPlayerID = self.identifyLocalPlayer(in: incoming)?.id
-                }
+                self.reconcileLocalPlayerID(with: incoming)
                 if incoming.phase == .initialPeek {
                     self.clearSpecialPeekFeedback()
                     let pid = self.localPlayerID ?? self.identifyLocalPlayer(in: incoming)?.id

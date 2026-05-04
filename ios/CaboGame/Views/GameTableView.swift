@@ -6,6 +6,8 @@ struct GameTableView: View {
     @State private var selectedOwnIndex: Int = 0
     @State private var selectedOpponentIndex: Int = 0
     @State private var selectedOpponentID: UUID?
+    /// King swap red outline is UI-only for a few seconds (state may keep `kingSwapHighlight` longer).
+    @State private var kingSwapOutlineFlashActive = false
 
     private let bgDark = Color(red: 0.05, green: 0.10, blue: 0.08)
     private let bgTable = Color(red: 0.08, green: 0.14, blue: 0.11)
@@ -38,6 +40,15 @@ struct GameTableView: View {
             }
         }
         .navigationBarHidden(true)
+        .task(id: viewModel.gameState.kingSwapHighlight) {
+            if viewModel.gameState.kingSwapHighlight == nil {
+                kingSwapOutlineFlashActive = false
+                return
+            }
+            kingSwapOutlineFlashActive = true
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            kingSwapOutlineFlashActive = false
+        }
     }
 
     private var header: some View {
@@ -307,7 +318,8 @@ struct GameTableView: View {
     }
 
     private func isKingSwapHighlighted(playerID: UUID, index: Int) -> Bool {
-        guard let h = viewModel.gameState.kingSwapHighlight else { return false }
+        guard kingSwapOutlineFlashActive,
+              let h = viewModel.gameState.kingSwapHighlight else { return false }
         return (h.fromPlayerID == playerID && h.fromHandIndex == index)
             || (h.toPlayerID == playerID && h.toHandIndex == index)
     }
@@ -523,7 +535,7 @@ struct GameTableView: View {
                     HStack(spacing: 6) {
                         action("Draw Deck", primary: true, h: h, fs: fs) { viewModel.draw(from: .deck) }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForDraw)
                         action("Draw Discard", primary: false, h: h, fs: fs) { viewModel.draw(from: .discardTop) }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForDraw)
-                        action("Match", primary: false, h: h, fs: fs) { viewModel.attemptMatchDiscard(withOwnCardAt: selectedOwnIndex) }.disabled(viewModel.gameState.phase == .initialPeek || localPlayer == nil)
+                        action("Match", primary: false, h: h, fs: fs) { viewModel.attemptMatchDiscard(withOwnCardAt: selectedOwnIndex) }.disabled(viewModel.gameState.phase == .initialPeek || localPlayer == nil || viewModel.isMatchDisabledAfterWrongGuess)
                     }
                     HStack(spacing: 6) {
                         action("Replace", primary: true, h: h, fs: fs) { viewModel.replaceWithDrawnCard(at: selectedOwnIndex) }.disabled(!isMyTurn || viewModel.gameState.phase != .waitingForPlacementOrDiscard)

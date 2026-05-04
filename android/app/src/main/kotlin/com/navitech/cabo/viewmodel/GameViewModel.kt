@@ -60,6 +60,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var lastError by mutableStateOf<String?>(null)
         private set
+    /** After a wrong Match, hide further Match presses until the discard pile changes. */
+    var isMatchDisabledAfterWrongGuess by mutableStateOf(false)
+        private set
 
     private var lobby: LobbyService = RemoteLobbyService()
     private var engine = CaboGameEngine()
@@ -68,6 +71,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var specialPeekClearJob: Job? = null
     private var matchStatusClearJob: Job? = null
     private var pendingHostStart: Boolean = false
+    private var matchDiscardWrongLocked = false
+    private var matchDiscardLockBaseline: Pair<Int, String?>? = null
+    private var matchAwaitingDiscardOutcome = false
+    private var matchAwaitingDiscardBaseline: Pair<Int, String?>? = null
     /**
      * The displayName captured at the moment the user tapped Host or Join.
      * Used to match ourselves in the host's player list, so editing the name
@@ -97,11 +104,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 is NetworkMessage.LobbyState -> Unit
                 is NetworkMessage.GameStateMsg -> {
                     val incoming = rebaseToLocalClock(message.state, message.serverNowMillis)
+                    if (incoming.winnerID != null || incoming.phase == TurnPhase.INITIAL_PEEK) {
+                        resetMatchDiscardWrongGuessLock()
+                    }
+                    resolvePendingMatchDiscardOutcome(incoming)
+                    clearWrongMatchLockIfDiscardMoved(incoming)
                     gameState = incoming
                     engine.load(incoming)
-                    if (localPlayerID == null) {
-                        localPlayerID = identifyLocalPlayer(incoming)?.id
-                    }
+                    reconcileLocalPlayerID(incoming)
                     if (incoming.phase == TurnPhase.INITIAL_PEEK) {
                         clearSpecialPeekFeedback()
                         val pid = localPlayerID ?: identifyLocalPlayer(incoming)?.id
@@ -202,10 +212,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         sessionDisplayName = null
         localPlayerID = null
         gameState = GameState()
+        resetMatchDiscardWrongGuessLock()
     }
 
     fun startGameAsHost() {
         try {
+            resetMatchDiscardWrongGuessLock()
             engine.startGame()
             gameState = engine.state
             clearTurnFeedback()
@@ -280,6 +292,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun attemptMatchDiscard(ownCardIndex: Int) {
         val playerID = localPlayerID ?: return
+        val stateBefore = gameState
         try {
             val me = gameState.players.firstOrNull { it.id == playerID }
             if (me != null && me.hand.indices.contains(ownCardIndex)) {
@@ -290,13 +303,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val wasCurrentTurn = gameState.currentPlayerID == playerID
                 val matched = engine.attemptMatchDiscard(playerID, ownCardIndex)
                 gameState = engine.state
+                if (!matched) {
+                    applyWrongMatchLock(gameState)
+                }
                 matchDiscardStatusText = matchStatusText(matched, wasCurrentTurn)
                 scheduleMatchDiscardClear()
                 broadcastGameState()
             } else {
+                matchAwaitingDiscardOutcome = true
+                matchAwaitingDiscardBaseline = discardSignature(stateBefore)
                 lobby.send(NetworkMessage.PlayerActionMsg(PlayerNetworkAction.AttemptMatchDiscard(playerID, ownCardIndex)))
             }
         } catch (e: Exception) {
+            matchAwaitingDiscardOutcome = false
+            matchAwaitingDiscardBaseline = null
             lastError = e.message
         }
     }
@@ -461,12 +481,71 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
         for (candidate in candidates) {
-            val match = incoming.players.firstOrNull {
+            val matches = incoming.players.filter {
                 it.name.trim().equals(candidate, ignoreCase = true)
             }
-            if (match != null) return match
+            when (matches.size) {
+                0 -> continue
+                1 -> return matches.first()
+                else -> {
+                    val id = localPlayerID
+                    if (id != null) {
+                        matches.firstOrNull { it.id == id }?.let { return it }
+                    }
+                    return matches.last()
+                }
+            }
         }
         return null
+    }
+
+    /**
+     * Keeps [localPlayerID] aligned with authoritative state after reconnects / duplicate names.
+     */
+    private fun reconcileLocalPlayerID(incoming: GameState) {
+        val id = localPlayerID
+        if (id != null && incoming.players.any { it.id == id }) return
+        localPlayerID = identifyLocalPlayer(incoming)?.id ?: incoming.players.lastOrNull()?.id
+    }
+
+    private fun discardSignature(state: GameState): Pair<Int, String?> =
+        state.discardPile.size to state.discardPile.lastOrNull()?.id
+
+    private fun applyWrongMatchLock(discardBaselineFrom: GameState) {
+        val baseline = discardSignature(discardBaselineFrom)
+        matchDiscardWrongLocked = true
+        matchDiscardLockBaseline = baseline
+        isMatchDisabledAfterWrongGuess = true
+    }
+
+    private fun clearWrongMatchLockIfDiscardMoved(incoming: GameState) {
+        if (!matchDiscardWrongLocked) return
+        val baseline = matchDiscardLockBaseline ?: return
+        if (discardSignature(incoming) != baseline) {
+            matchDiscardWrongLocked = false
+            matchDiscardLockBaseline = null
+            isMatchDisabledAfterWrongGuess = false
+        }
+    }
+
+    private fun resolvePendingMatchDiscardOutcome(incoming: GameState) {
+        if (!matchAwaitingDiscardOutcome) return
+        matchAwaitingDiscardOutcome = false
+        val pending = matchAwaitingDiscardBaseline
+        matchAwaitingDiscardBaseline = null
+        if (pending != null && discardSignature(incoming) == pending) {
+            matchDiscardWrongLocked = true
+            matchDiscardLockBaseline = pending
+            isMatchDisabledAfterWrongGuess = true
+        }
+    }
+
+    private fun resetMatchDiscardWrongGuessLock() {
+        matchDiscardWrongLocked = false
+        matchDiscardLockBaseline = null
+        matchAwaitingDiscardOutcome = false
+        matchAwaitingDiscardBaseline = null
+        isMatchDisabledAfterWrongGuess = false
     }
 
     private fun clearTurnFeedback() {
@@ -650,6 +729,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (action.playerID == localPlayerID) {
                     matchDiscardStatusText = matchStatusText(matched, wasCurrentTurn)
                     scheduleMatchDiscardClear()
+                    if (!matched) {
+                        applyWrongMatchLock(engine.state)
+                    }
                 }
             }
             is PlayerNetworkAction.Draw -> {

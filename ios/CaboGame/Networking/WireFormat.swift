@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // Cross-platform JSON wire format shared between LocalLobbyService and
@@ -12,6 +13,31 @@ extension UUID {
     /// comparisons on player IDs in its engine, so any mismatch in casing
     /// breaks lookups when iOS sends an action ID back to an Android host.
     var wireString: String { uuidString.lowercased() }
+
+    /// Normalizes wire UUID strings and parses them. Never returns a fresh random UUID:
+    /// decoding used `UUID(uuidString:) ?? UUID()`, which minted a **new** ID on every
+    /// message whenever parsing failed — breaking `localPlayerID`, seating, and turns.
+    static func fromWire(_ raw: String) -> UUID {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("{"), s.hasSuffix("}") {
+            s.removeFirst()
+            s.removeLast()
+            s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let normalized = s.lowercased()
+        if let u = UUID(uuidString: normalized) { return u }
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        let prefix = Array(digest.prefix(16))
+        var b = prefix
+        b[6] = (b[6] & 0x0F) | 0x40
+        b[8] = (b[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            b[0], b[1], b[2], b[3],
+            b[4], b[5], b[6], b[7],
+            b[8], b[9], b[10], b[11],
+            b[12], b[13], b[14], b[15]
+        ))
+    }
 }
 
 enum WireMessageType: String, Codable {
@@ -382,7 +408,7 @@ extension WirePlayer {
 
     func toApp() -> Player {
         Player(
-            id: UUID(uuidString: id) ?? UUID(),
+            id: UUID.fromWire(id),
             name: name,
             hand: hand.map { $0?.toApp() },
             roundsToSkip: roundsToSkip
@@ -410,7 +436,7 @@ extension WireCard {
 
     func toApp() -> Card {
         Card(
-            id: UUID(uuidString: id) ?? UUID(),
+            id: UUID.fromWire(id),
             suit: suit.toApp(),
             rank: rank.toApp()
         )

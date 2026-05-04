@@ -71,8 +71,32 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     }
 
     val scrollState = rememberScrollState()
-    LaunchedEffect(gameState.phase, activeSpecialRank, viewModel.matchDiscardStatusText) {
+
+    // Wrong/correct Match updates `matchDiscardStatusText`; resetting scroll on that key caused the
+    // scrollable Column to briefly lay out with a bad offset (gap under the header / HUD).
+    LaunchedEffect(gameState.phase, activeSpecialRank) {
         scrollState.scrollTo(0)
+    }
+
+    // After dynamic height changes (HUD chips, banners), clamp offset so it never exceeds maxValue.
+    LaunchedEffect(scrollState.maxValue) {
+        val max = scrollState.maxValue
+        val clamped = scrollState.value.coerceIn(0, max)
+        if (clamped != scrollState.value) {
+            scrollState.scrollTo(clamped)
+        }
+    }
+
+    var kingSwapOutlineFlashActive by remember { mutableStateOf(false) }
+    LaunchedEffect(gameState.kingSwapHighlight) {
+        val highlight = gameState.kingSwapHighlight
+        if (highlight == null) {
+            kingSwapOutlineFlashActive = false
+            return@LaunchedEffect
+        }
+        kingSwapOutlineFlashActive = true
+        delay(5_000)
+        kingSwapOutlineFlashActive = false
     }
 
     // Turn countdown is driven from authoritative [GameState.currentTurnEndsAt]
@@ -243,6 +267,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         player = north,
                         isLocal = false,
                         tableSeat = TableSeatPosition.North,
+                        kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -259,6 +284,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         player = localPlayer,
                         isLocal = true,
                         tableSeat = TableSeatPosition.South,
+                        kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -275,6 +301,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         player = east,
                         isLocal = false,
                         tableSeat = TableSeatPosition.East,
+                        kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -291,6 +318,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         player = west,
                         isLocal = false,
                         tableSeat = TableSeatPosition.West,
+                        kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
                         viewModel = viewModel,
                         selectedOwnIndex = selectedOwnIndex,
                         onSelectOwn = { selectedOwnIndex = it },
@@ -406,7 +434,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                                 )
                                 ActionButton(
                                     label = "Match",
-                                    enabled = gameState.phase != TurnPhase.INITIAL_PEEK && localPlayer != null,
+                                    enabled = gameState.phase != TurnPhase.INITIAL_PEEK && localPlayer != null && !viewModel.isMatchDisabledAfterWrongGuess,
                                     onClick = { viewModel.attemptMatchDiscard(selectedOwnIndex) }
                                 )
                             }
@@ -492,6 +520,7 @@ private fun PortraitHandCards(
     layoutHorizontal: Boolean,
     player: Player,
     isLocal: Boolean,
+    kingSwapOutlineFlashActive: Boolean,
     viewModel: GameViewModel,
     selectedOwnIndex: Int,
     onSelectOwn: (Int) -> Unit,
@@ -513,10 +542,10 @@ private fun PortraitHandCards(
                     viewModel.queenPeekedOpponentPlayerID == player.id && viewModel.queenPeekedOpponentIndex == idx
                 }
                 val revealed = revealedBase || viewModel.gameState.winnerID != null
-                val kingSwapOutline = viewModel.gameState.kingSwapHighlight?.let { h ->
-                    (player.id == h.fromPlayerID && idx == h.fromHandIndex) ||
-                        (player.id == h.toPlayerID && idx == h.toHandIndex)
-                } ?: false
+                val highlight = viewModel.gameState.kingSwapHighlight
+                val kingSwapOutline = kingSwapOutlineFlashActive && highlight != null &&
+                    ((player.id == highlight.fromPlayerID && idx == highlight.fromHandIndex) ||
+                        (player.id == highlight.toPlayerID && idx == highlight.toHandIndex))
                 TableCard(
                     text = if (revealed && card != null) card.shortName else "",
                     isFaceUp = revealed && card != null,
@@ -548,10 +577,10 @@ private fun PortraitHandCards(
                     viewModel.queenPeekedOpponentPlayerID == player.id && viewModel.queenPeekedOpponentIndex == idx
                 }
                 val revealed = revealedBase || viewModel.gameState.winnerID != null
-                val kingSwapOutline = viewModel.gameState.kingSwapHighlight?.let { h ->
-                    (player.id == h.fromPlayerID && idx == h.fromHandIndex) ||
-                        (player.id == h.toPlayerID && idx == h.toHandIndex)
-                } ?: false
+                val highlight = viewModel.gameState.kingSwapHighlight
+                val kingSwapOutline = kingSwapOutlineFlashActive && highlight != null &&
+                    ((player.id == highlight.fromPlayerID && idx == highlight.fromHandIndex) ||
+                        (player.id == highlight.toPlayerID && idx == highlight.toHandIndex))
                 TableCard(
                     text = if (revealed && card != null) card.shortName else "",
                     isFaceUp = revealed && card != null,
@@ -579,6 +608,7 @@ private fun SeatRow(
     player: Player?,
     isLocal: Boolean,
     tableSeat: TableSeatPosition,
+    kingSwapOutlineFlashActive: Boolean,
     viewModel: GameViewModel,
     selectedOwnIndex: Int,
     onSelectOwn: (Int) -> Unit,
@@ -626,6 +656,7 @@ private fun SeatRow(
             layoutHorizontal = tableSeat == TableSeatPosition.North || tableSeat == TableSeatPosition.South,
             player = player,
             isLocal = isLocal,
+            kingSwapOutlineFlashActive = kingSwapOutlineFlashActive,
             viewModel = viewModel,
             selectedOwnIndex = selectedOwnIndex,
             onSelectOwn = onSelectOwn,
