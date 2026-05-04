@@ -8,15 +8,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.navitech.cabo.models.Card
@@ -28,6 +33,17 @@ import com.navitech.cabo.ui.theme.HowToPlayGreenDeep
 
 private val CaptionAlpha = 0.72f
 private val SurfaceAlpha = 0.10f
+
+private val howToPlayGoalScoring: List<Pair<Card, Int>> =
+    listOf(
+        Card(suit = Suit.SPADES, rank = Rank.ACE) to 1,
+        Card(suit = Suit.HEARTS, rank = Rank.TWO) to 2,
+        Card(suit = Suit.DIAMONDS, rank = Rank.THREE) to 3,
+        Card(suit = Suit.HEARTS, rank = Rank.TEN) to 10,
+        Card(suit = Suit.DIAMONDS, rank = Rank.JACK) to 11,
+        Card(suit = Suit.CLUBS, rank = Rank.QUEEN) to 12,
+        Card(suit = Suit.SPADES, rank = Rank.KING) to 13,
+    )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +59,7 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                     title = { Text("How To Play", color = Color.White) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                            Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -65,15 +81,33 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                     lineHeight = 20.sp
                 )
 
-                GuideSection(title = "Goal", caption = "Lowest total wins the round. Each card scores its rank as points.") {
+                GuideSection(
+                    title = "Goal",
+                    caption = "Lowest total wins the round. Ace = 1 pt. Cards 2–10 score their number (2 = 2 pts … 10 = 10 pts). Jack = 11, Queen = 12, King = 13."
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.Bottom
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.Top
                     ) {
-                        ScoringChip(Card(Suit.SPADES, Rank.ACE), points = 1)
-                        ScoringChip(Card(Suit.HEARTS, Rank.EIGHT), points = 8)
-                        ScoringChip(Card(Suit.CLUBS, Rank.KING), points = 13)
+                        howToPlayGoalScoring.forEachIndexed { index, (card, pts) ->
+                            if (index > 0) Spacer(Modifier.width(8.dp))
+                            ScoringChip(
+                                card = card,
+                                points = pts,
+                                cardWidth = 28.dp,
+                                cardHeight = 40.dp,
+                                labelFontSize = 10.sp,
+                                suitFontSize = 10.sp,
+                            )
+                            if (card.rank == Rank.THREE) {
+                                Spacer(Modifier.width(8.dp))
+                                GoalRankEllipsis(
+                                    cardHeight = 40.dp,
+                                    labelFontSize = 10.sp,
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -83,10 +117,11 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                        horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         repeat(4) { idx ->
+                            if (idx > 0) Spacer(Modifier.width(6.dp))
                             DemoFaceDownCard(
                                 modifier = Modifier.size(width = 34.dp, height = 48.dp),
                                 emphasized = idx == 1 || idx == 3
@@ -97,9 +132,10 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                         "Gold outline = example peek picks",
                         color = Color.White.copy(alpha = CaptionAlpha),
                         fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .fillMaxWidth(),
+                        textAlign = TextAlign.Center
                     )
                 }
 
@@ -123,15 +159,15 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        PowerCardDemo(Card(Suit.CLUBS, Rank.JACK), "Peek one of your cards.")
-                        PowerCardDemo(Card(Suit.HEARTS, Rank.QUEEN), "Peek one opponent card.")
-                        PowerCardDemo(Card(Suit.SPADES, Rank.KING), "Swap one of yours with any opponent card.")
+                        PowerCardDemo(Card(suit = Suit.CLUBS, rank = Rank.JACK), "Peek one of your cards.")
+                        PowerCardDemo(Card(suit = Suit.HEARTS, rank = Rank.QUEEN), "Peek one opponent card.")
+                        PowerCardDemo(Card(suit = Suit.SPADES, rank = Rank.KING), "Swap one of yours with any opponent card.")
                     }
                 }
 
                 GuideSection(
                     title = "Match the discard",
-                    caption = "Anytime on your turn you may try to match the top discard’s rank with one of your face-up slots."
+                    caption = "Anytime (your turn or not): choose one of your cards. Same rank as the top discard removes it from your hand. Wrong guess skips your next turn — or ends your turn immediately if it was already yours."
                 ) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -140,16 +176,16 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Top discard", color = Color.White.copy(alpha = CaptionAlpha), fontSize = 12.sp)
-                            DemoPlayingCard(Card(Suit.SPADES, Rank.FIVE), Modifier.size(width = 38.dp, height = 54.dp))
+                            DemoPlayingCard(Card(suit = Suit.SPADES, rank = Rank.FIVE), Modifier.size(width = 38.dp, height = 54.dp))
                         }
-                        Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))
+                        Icon(imageVector = Icons.Filled.ArrowDownward, contentDescription = null, tint = Color.White.copy(alpha = 0.5f))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 DemoPlayingCard(
-                                    Card(Suit.DIAMONDS, Rank.FIVE),
+                                    Card(suit = Suit.DIAMONDS, rank = Rank.FIVE),
                                     Modifier
                                         .size(width = 38.dp, height = 54.dp)
                                         .border(2.dp, Color(0xFF4CAF50), RoundedCornerShape(6.dp))
@@ -158,7 +194,7 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                             }
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 DemoPlayingCard(
-                                    Card(Suit.DIAMONDS, Rank.THREE),
+                                    Card(suit = Suit.DIAMONDS, rank = Rank.THREE),
                                     Modifier
                                         .size(width = 38.dp, height = 54.dp)
                                         .border(2.dp, Color(0xFFE53935), RoundedCornerShape(6.dp))
@@ -180,7 +216,7 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                     ) {
                         Text("Final turns", color = Color(0xFFF2BF4D), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             tint = Color.White.copy(alpha = 0.45f),
                             modifier = Modifier.padding(horizontal = 8.dp)
@@ -209,10 +245,51 @@ private fun GuideSection(title: String, caption: String, content: @Composable Co
 }
 
 @Composable
-private fun ScoringChip(card: Card, points: Int) {
+private fun GoalRankEllipsis(cardHeight: Dp, labelFontSize: TextUnit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.semantics { contentDescription = "More ranks in between" }
+    ) {
+        Row(
+            modifier = Modifier.height(cardHeight),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(3) { dot ->
+                if (dot > 0) Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "\u00B7",
+                    color = Color.White.copy(alpha = CaptionAlpha),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Text(
+            text = "0 pts",
+            fontSize = labelFontSize,
+            color = Color.Transparent
+        )
+    }
+}
+
+@Composable
+private fun ScoringChip(
+    card: Card,
+    points: Int,
+    cardWidth: Dp = 38.dp,
+    cardHeight: Dp = 54.dp,
+    labelFontSize: TextUnit = 11.sp,
+    suitFontSize: TextUnit = 14.sp,
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        DemoPlayingCard(card, Modifier.size(width = 38.dp, height = 54.dp))
-        Text("$points pts", color = Color.White.copy(alpha = CaptionAlpha), fontSize = 11.sp)
+        DemoPlayingCard(
+            card,
+            Modifier.size(width = cardWidth, height = cardHeight),
+            fontSize = suitFontSize,
+        )
+        Text("$points pts", color = Color.White.copy(alpha = CaptionAlpha), fontSize = labelFontSize)
     }
 }
 
@@ -230,7 +307,7 @@ private fun DemoFaceDownCard(modifier: Modifier = Modifier, emphasized: Boolean)
 }
 
 @Composable
-private fun DemoPlayingCard(card: Card, modifier: Modifier = Modifier) {
+private fun DemoPlayingCard(card: Card, modifier: Modifier = Modifier, fontSize: TextUnit = 14.sp) {
     val red = card.suit == Suit.HEARTS || card.suit == Suit.DIAMONDS
     Box(
         modifier = modifier
@@ -242,7 +319,7 @@ private fun DemoPlayingCard(card: Card, modifier: Modifier = Modifier) {
             text = card.shortName,
             color = if (red) Color(0xFFD32F2F) else Color(0xFF212121),
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
+            fontSize = fontSize,
             maxLines = 1
         )
     }
@@ -283,11 +360,11 @@ private fun FlowRowIllustration() {
                 Spacer(Modifier.height(4.dp))
                 DemoFaceDownCard(Modifier.size(36.dp, 48.dp), emphasized = false)
             }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = arrowTint)
+            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = arrowTint)
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
                 DemoPileChip("Discard")
                 Spacer(Modifier.height(4.dp))
-                DemoPlayingCard(Card(Suit.HEARTS, Rank.NINE), Modifier.size(36.dp, 48.dp))
+                DemoPlayingCard(Card(suit = Suit.HEARTS, rank = Rank.NINE), Modifier.size(36.dp, 48.dp))
             }
         }
         Row(
@@ -295,7 +372,7 @@ private fun FlowRowIllustration() {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = arrowTint)
+            Icon(imageVector = Icons.Filled.ArrowDownward, contentDescription = null, tint = arrowTint)
         }
         Row(
             Modifier.fillMaxWidth(),
@@ -308,7 +385,7 @@ private fun FlowRowIllustration() {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     repeat(4) { idx ->
                         if (idx == 2) {
-                            DemoPlayingCard(Card(Suit.CLUBS, Rank.TWO), Modifier.size(30.dp, 42.dp))
+                            DemoPlayingCard(Card(suit = Suit.CLUBS, rank = Rank.TWO), Modifier.size(30.dp, 42.dp))
                         } else {
                             DemoFaceDownCard(Modifier.size(30.dp, 42.dp), emphasized = false)
                         }
