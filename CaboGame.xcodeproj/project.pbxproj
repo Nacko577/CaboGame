@@ -14,36 +14,44 @@
 		205C3B429FF87D69F6E0A376 /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D60271A487BD2E6BF39CC192 /* LobbyView.swift */; };
 		322008E9E264714581C3A42F /* MainMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D0FC81894AE3F9EFDBE249 /* MainMenuView.swift */; };
 		45B487756DD1B7214827B921 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6DDA84B2AB82781353DF5401 /* Assets.xcassets */; };
-		E9B8243E5F0C1D2A3B4C5D6E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F8A7132C4E9B0A1D2E3F4051 /* PrivacyInfo.xcprivacy */; };
 		4EAD08CBE0700FCEBAFD4B40 /* Player.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B4E7D39CE0041FC5DA8DED /* Player.swift */; };
 		5C24F2575A1F801E01DCD4E2 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2E74730D8E96B08A7AD9C2 /* SplashView.swift */; };
+		739C75EEFF9DB8D46E8DA8C6 /* TableTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 323F4BE0656CD8C453A033EB /* TableTheme.swift */; };
+		73CB7C91C92708B36BA66F19 /* MailComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10A4CC512E6273EE15A5A522 /* MailComposeView.swift */; };
 		78D5C1A7A12253ED48AA3E71 /* HowToPlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB2D34672DD23115275F4FEC /* HowToPlayView.swift */; };
 		7EB0D903EBD8C3FFC8F1486E /* CaboAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6945144D5317CFFEF6E509B2 /* CaboAction.swift */; };
 		9C0062D9DBD1EBF465AD8F8A /* RemoteLobbyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1969F2A98E874024CC99F89F /* RemoteLobbyService.swift */; };
 		A369D645F5CC4A2DD0AB75A3 /* WireFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BA2ACF83F8E4CD823605E49 /* WireFormat.swift */; };
+		BFBD9A456D39AF249E191B8D /* FeedbackSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FABDF3DC8A10CFCA8AA788 /* FeedbackSupport.swift */; };
 		C440924C418F7C07243F2C8A /* CaboGameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC59D3C6A5F167DCC275DEDE /* CaboGameApp.swift */; };
+		CFAC1A2C839C2F004BA4970E /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18C70273914232BCFA06CC58 /* AppearanceSettingsView.swift */; };
 		E31131E7F3CE544C716DB2B4 /* GameViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7440B81EDDCF991027EAC795 /* GameViewModel.swift */; };
 		E4EDCEE5C716FC46084C222E /* CaboGameEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDD4D4E49CBD43033061B543 /* CaboGameEngine.swift */; };
 		E839A1CDC3A9806372AE4EA3 /* LocalLobbyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0BE41EE5D5A872F84D4493 /* LocalLobbyService.swift */; };
+		F089F62D40C04E7A9C516F76 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7CBF2EA0D8D8EA2A9B930A47 /* PrivacyInfo.xcprivacy */; };
 		FAA6D74047307CFFA7260720 /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F1FC140D02899A60B9B382B /* GameState.swift */; };
 		FFE409800EC149E30BF97EF7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C027D1922050709502426D /* RootView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		10A4CC512E6273EE15A5A522 /* MailComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MailComposeView.swift; sourceTree = "<group>"; };
+		18C70273914232BCFA06CC58 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		1969F2A98E874024CC99F89F /* RemoteLobbyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLobbyService.swift; sourceTree = "<group>"; };
 		28C027D1922050709502426D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		323F4BE0656CD8C453A033EB /* TableTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableTheme.swift; sourceTree = "<group>"; };
 		4BA2ACF83F8E4CD823605E49 /* WireFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WireFormat.swift; sourceTree = "<group>"; };
 		4F1FC140D02899A60B9B382B /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
 		6945144D5317CFFEF6E509B2 /* CaboAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaboAction.swift; sourceTree = "<group>"; };
 		6DDA84B2AB82781353DF5401 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		F8A7132C4E9B0A1D2E3F4051 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7440B81EDDCF991027EAC795 /* GameViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameViewModel.swift; sourceTree = "<group>"; };
+		7CBF2EA0D8D8EA2A9B930A47 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		876964EA2B6B10E56BFC9236 /* GameTableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTableView.swift; sourceTree = "<group>"; };
-		955FF69800B5110AA69FB957 /* CaboGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CaboGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		955FF69800B5110AA69FB957 /* CaboGame.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CaboGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A34376F8922F35B94F882732 /* Card.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Card.swift; sourceTree = "<group>"; };
 		BB6AA062FC73F65D2719D999 /* ServerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfig.swift; sourceTree = "<group>"; };
 		BC59D3C6A5F167DCC275DEDE /* CaboGameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaboGameApp.swift; sourceTree = "<group>"; };
 		BF2E74730D8E96B08A7AD9C2 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		C6FABDF3DC8A10CFCA8AA788 /* FeedbackSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackSupport.swift; sourceTree = "<group>"; };
 		C8D0FC81894AE3F9EFDBE249 /* MainMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainMenuView.swift; sourceTree = "<group>"; };
 		D60271A487BD2E6BF39CC192 /* LobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyView.swift; sourceTree = "<group>"; };
 		DB2D34672DD23115275F4FEC /* HowToPlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HowToPlayView.swift; sourceTree = "<group>"; };
@@ -59,10 +67,12 @@
 			children = (
 				6DDA84B2AB82781353DF5401 /* Assets.xcassets */,
 				BC59D3C6A5F167DCC275DEDE /* CaboGameApp.swift */,
-				F8A7132C4E9B0A1D2E3F4051 /* PrivacyInfo.xcprivacy */,
+				7CBF2EA0D8D8EA2A9B930A47 /* PrivacyInfo.xcprivacy */,
 				5121D37D1C9768B603D81085 /* Core */,
 				77F0DE040F9F90A2AF8866AE /* Models */,
 				513E91B880C86565C015F043 /* Networking */,
+				A020089E4A3BA00C49B87BD0 /* Support */,
+				34E30B0E077166FB85ACC568 /* Theme */,
 				BBFEBC5DBE8CD2D57AAD6E4D /* ViewModels */,
 				3A57C5A0C3CB9B9D7D892591 /* Views */,
 			);
@@ -70,9 +80,18 @@
 			path = ios/CaboGame;
 			sourceTree = "<group>";
 		};
+		34E30B0E077166FB85ACC568 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				323F4BE0656CD8C453A033EB /* TableTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
 		3A57C5A0C3CB9B9D7D892591 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				18C70273914232BCFA06CC58 /* AppearanceSettingsView.swift */,
 				876964EA2B6B10E56BFC9236 /* GameTableView.swift */,
 				DB2D34672DD23115275F4FEC /* HowToPlayView.swift */,
 				D60271A487BD2E6BF39CC192 /* LobbyView.swift */,
@@ -122,6 +141,15 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		A020089E4A3BA00C49B87BD0 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				C6FABDF3DC8A10CFCA8AA788 /* FeedbackSupport.swift */,
+				10A4CC512E6273EE15A5A522 /* MailComposeView.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
 		BBFEBC5DBE8CD2D57AAD6E4D /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -169,6 +197,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1CFCA73D4BF904EAA46EEB6B = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -198,7 +227,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				45B487756DD1B7214827B921 /* Assets.xcassets in Resources */,
-				E9B8243E5F0C1D2A3B4C5D6E /* PrivacyInfo.xcprivacy in Resources */,
+				F089F62D40C04E7A9C516F76 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,10 +238,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CFAC1A2C839C2F004BA4970E /* AppearanceSettingsView.swift in Sources */,
 				7EB0D903EBD8C3FFC8F1486E /* CaboAction.swift in Sources */,
 				C440924C418F7C07243F2C8A /* CaboGameApp.swift in Sources */,
 				E4EDCEE5C716FC46084C222E /* CaboGameEngine.swift in Sources */,
 				19896F722F49D248225E105F /* Card.swift in Sources */,
+				BFBD9A456D39AF249E191B8D /* FeedbackSupport.swift in Sources */,
 				FAA6D74047307CFFA7260720 /* GameState.swift in Sources */,
 				0D1693D3B99AB696C6573CF0 /* GameTableView.swift in Sources */,
 				E31131E7F3CE544C716DB2B4 /* GameViewModel.swift in Sources */,
@@ -220,12 +251,14 @@
 				0702888A13F5484902AE4188 /* LobbyService.swift in Sources */,
 				205C3B429FF87D69F6E0A376 /* LobbyView.swift in Sources */,
 				E839A1CDC3A9806372AE4EA3 /* LocalLobbyService.swift in Sources */,
+				73CB7C91C92708B36BA66F19 /* MailComposeView.swift in Sources */,
 				322008E9E264714581C3A42F /* MainMenuView.swift in Sources */,
 				4EAD08CBE0700FCEBAFD4B40 /* Player.swift in Sources */,
 				9C0062D9DBD1EBF465AD8F8A /* RemoteLobbyService.swift in Sources */,
 				FFE409800EC149E30BF97EF7 /* RootView.swift in Sources */,
 				15F7343C080D3C0ED2BC6B02 /* ServerConfig.swift in Sources */,
 				5C24F2575A1F801E01DCD4E2 /* SplashView.swift in Sources */,
+				739C75EEFF9DB8D46E8DA8C6 /* TableTheme.swift in Sources */,
 				A369D645F5CC4A2DD0AB75A3 /* WireFormat.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -267,7 +300,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -281,13 +314,16 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Cabo;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSBonjourServices = "_cabo-local._tcp";
+				INFOPLIST_KEY_NSBonjourServices = (
+					"_cabo-local._tcp",
+				);
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Cabo uses your local network to discover nearby players.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.navitech.cabo;
@@ -305,17 +341,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5KUPSL6FDM;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.card-games";
+				DEVELOPMENT_TEAM = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_NAME = CaboGame;
 				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -325,17 +358,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 5KUPSL6FDM;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.card-games";
+				DEVELOPMENT_TEAM = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_NAME = CaboGame;
 				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -373,7 +403,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 5;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -393,13 +423,16 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Cabo;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSBonjourServices = "_cabo-local._tcp";
+				INFOPLIST_KEY_NSBonjourServices = (
+					"_cabo-local._tcp",
+				);
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Cabo uses your local network to discover nearby players.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

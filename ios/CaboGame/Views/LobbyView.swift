@@ -2,7 +2,12 @@ import SwiftUI
 
 struct LobbyView: View {
     @EnvironmentObject private var viewModel: GameViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let onBack: () -> Void
+
+    private var contentMaxWidth: CGFloat? {
+        horizontalSizeClass == .regular ? 720 : nil
+    }
 
     private var trimmedPlayerName: String {
         viewModel.playerName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -109,7 +114,7 @@ struct LobbyView: View {
                         }
 
                         Text(viewModel.transport == .online
-                             ? "Play across the internet via the relay server."
+                             ? "Play across the internet via the server."
                              : "Both players must be on the same Wi-Fi network.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(.white.opacity(0.4))
@@ -303,6 +308,8 @@ struct LobbyView: View {
                         }
                     }
                 }
+                .frame(maxWidth: contentMaxWidth ?? .infinity)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }

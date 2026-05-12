@@ -3,39 +3,58 @@ import SwiftUI
 struct GameTableView: View {
     @EnvironmentObject private var viewModel: GameViewModel
     let onLeaveGame: () -> Void
+    @AppStorage("cabogame.boardTheme") private var boardThemeRaw = BoardTheme.forest.rawValue
+    @AppStorage("cabogame.cardDeckStyle") private var cardDeckRaw = CardDeckStyle.classic.rawValue
     @State private var selectedOwnIndex: Int = 0
     @State private var selectedOpponentIndex: Int = 0
     @State private var selectedOpponentID: UUID?
     /// King swap red outline is UI-only for a few seconds (state may keep `kingSwapHighlight` longer).
     @State private var kingSwapOutlineFlashActive = false
 
-    private let bgDark = Color(red: 0.05, green: 0.10, blue: 0.08)
-    private let bgTable = Color(red: 0.08, green: 0.14, blue: 0.11)
-    private let tableBorder = Color(red: 0.18, green: 0.65, blue: 0.45)
-    private let accentGreen = Color(red: 0.18, green: 0.75, blue: 0.55)
-    private let accentGold = Color(red: 0.95, green: 0.75, blue: 0.30)
-    private let cardBack = Color(red: 0.12, green: 0.18, blue: 0.24)
+    private var boardTheme: BoardTheme { BoardTheme.fromStored(boardThemeRaw) }
+    private var cardDeck: CardDeckStyle { CardDeckStyle.fromStored(cardDeckRaw) }
+    private var bgDark: Color { boardTheme.bgDark }
+    private var bgTable: Color { boardTheme.bgTable }
+    private var tableBorder: Color { boardTheme.tableBorder }
+    private var accentGreen: Color { boardTheme.accentPrimary }
+    private var accentGold: Color { boardTheme.accentGold }
 
     var body: some View {
         GeometryReader { geo in
+            let minSide = min(geo.size.width, geo.size.height)
             let compact = geo.size.height < 750
             let narrow = geo.size.width < 390
-            let opW: CGFloat = narrow ? 30 : (compact ? 34 : 40)
+            let layoutScale = Self.metricsScale(minSide: minSide)
+            let baseOpW: CGFloat = narrow ? 30 : (compact ? 34 : 40)
+            let opW = baseOpW * layoutScale
             let opH = opW * 1.4
-            let myW: CGFloat = narrow ? 42 : (compact ? 46 : 54)
+            let baseMyW: CGFloat = narrow ? 42 : (compact ? 46 : 54)
+            let myW = baseMyW * layoutScale
             let myH = myW * 1.4
 
-            ZStack {
+            ZStack(alignment: .top) {
                 bgDark.ignoresSafeArea()
                 VStack(spacing: 6) {
-                    header
-                    topPillsRow
-                    matchResultBanner
-                    tableArea(opW: opW, opH: opH, myW: myW, myH: myH, compact: compact, width: geo.size.width, height: geo.size.height)
-                    statusBanner
-                    controls(compact: compact)
+                    header(layoutScale: layoutScale)
+                    topPillsRow(layoutScale: layoutScale)
+                    matchResultBanner(layoutScale: layoutScale)
+                    tableArea(
+                        opW: opW,
+                        opH: opH,
+                        myW: myW,
+                        myH: myH,
+                        compact: compact,
+                        width: geo.size.width,
+                        height: geo.size.height,
+                        safeInsets: geo.safeAreaInsets,
+                        dimensionScale: layoutScale
+                    )
+                    statusBanner(layoutScale: layoutScale)
+                    controls(compact: compact, layoutScale: layoutScale)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.horizontal, max(10, minSide * 0.02))
                 .padding(.vertical, 4)
             }
         }
@@ -51,21 +70,28 @@ struct GameTableView: View {
         }
     }
 
-    private var header: some View {
-        HStack {
+    /// Scales card piles and touch targets on tablets without shrinking phones (baseline ≈ iPhone 11 width).
+    private static func metricsScale(minSide: CGFloat) -> CGFloat {
+        min(1.42, max(1.0, minSide / 414))
+    }
+
+    private func header(layoutScale: CGFloat) -> some View {
+        let leaveFs = min(15, 12 * layoutScale)
+        let skipFs = min(14, 11 * layoutScale)
+        return HStack {
             Button(action: onLeaveGame) {
                 Text("Leave")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: leaveFs, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, max(10, 10 * layoutScale))
+                    .padding(.vertical, max(6, 6 * layoutScale))
                     .background(Color.white.opacity(0.12))
                     .cornerRadius(8)
             }
             Spacer()
             if let me = localPlayer, me.roundsToSkip > 0 {
                 Text("Skip \(me.roundsToSkip)")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: skipFs, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 8).padding(.vertical, 5)
                     .background(Color.red.opacity(0.4)).cornerRadius(6)
@@ -75,18 +101,21 @@ struct GameTableView: View {
         }
     }
 
-    private func topPill(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .semibold))
+    private func topPill(_ text: String, color: Color, layoutScale: CGFloat) -> some View {
+        let fs = min(15, 12 * layoutScale)
+        let padH = max(10, 10 * layoutScale)
+        let padV = max(6, 6 * layoutScale)
+        return Text(text)
+            .font(.system(size: fs, weight: .semibold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, padH)
+            .padding(.vertical, padV)
             .background(color.opacity(0.3))
             .cornerRadius(8)
     }
 
-    private var turnPill: some View {
+    private func turnPill(layoutScale: CGFloat) -> some View {
         let isPeek = viewModel.gameState.phase == .initialPeek
         let text: String
         if isPeek {
@@ -97,49 +126,49 @@ struct GameTableView: View {
             text = "\(currentTurnName)'s turn"
         }
 
-        return topPill(text, color: isPeek ? accentGold : (isMyTurn ? accentGreen : accentGold))
+        return topPill(text, color: isPeek ? accentGold : (isMyTurn ? accentGreen : accentGold), layoutScale: layoutScale)
     }
 
-    private var peekProgressPill: some View {
+    private func peekProgressPill(layoutScale: CGFloat) -> some View {
         Group {
             if viewModel.gameState.phase == .initialPeek {
-                topPill("Peek 2 cards (\(remainingInitialPeeks) left)", color: accentGold)
+                topPill("Peek 2 cards (\(remainingInitialPeeks) left)", color: accentGold, layoutScale: layoutScale)
             }
         }
     }
 
-    private var peekTimerPill: some View {
+    private func peekTimerPill(layoutScale: CGFloat) -> some View {
         Group {
             if viewModel.gameState.phase == .initialPeek {
-                topPill("Time left: \(viewModel.initialPeekSecondsRemaining ?? 0)s", color: accentGold)
+                topPill("Time left: \(viewModel.initialPeekSecondsRemaining ?? 0)s", color: accentGold, layoutScale: layoutScale)
             }
         }
     }
 
-    private var turnTimerPill: some View {
+    private func turnTimerPill(layoutScale: CGFloat) -> some View {
         Group {
             if let secs = viewModel.currentTurnSecondsRemaining,
                viewModel.gameState.winnerID == nil,
                viewModel.gameState.phase != .initialPeek {
                 // Tint red when time is running out so the warning is obvious.
                 let color: Color = secs <= 5 ? Color(red: 0.95, green: 0.30, blue: 0.30) : accentGold
-                topPill("\(secs)s", color: color)
+                topPill("\(secs)s", color: color, layoutScale: layoutScale)
             }
         }
     }
 
-    private var topPillsRow: some View {
+    private func topPillsRow(layoutScale: CGFloat) -> some View {
         HStack(spacing: 8) {
             if viewModel.gameState.winnerID != nil {
                 // Game is over; the round-result banner takes over.
                 EmptyView()
             } else if viewModel.gameState.phase == .initialPeek {
-                turnPill
-                peekProgressPill
-                peekTimerPill
+                turnPill(layoutScale: layoutScale)
+                peekProgressPill(layoutScale: layoutScale)
+                peekTimerPill(layoutScale: layoutScale)
             } else {
-                turnPill
-                turnTimerPill
+                turnPill(layoutScale: layoutScale)
+                turnTimerPill(layoutScale: layoutScale)
             }
         }
         .padding(.horizontal, 2)
@@ -152,13 +181,24 @@ struct GameTableView: View {
         myH: CGFloat,
         compact: Bool,
         width: CGFloat,
-        height: CGFloat
+        height: CGFloat,
+        safeInsets: EdgeInsets,
+        dimensionScale: CGFloat
     ) -> some View {
+        let minSide = min(width, height)
+        let expandedLayout = minSide >= 560
         let boardW = width * 0.94
         let tallBoard = opponents.count > 3
-        // Give extra vertical room when east/west each show two stacked seats.
-        let boardHCap: CGFloat = tallBoard ? (compact ? 560 : 600) : (compact ? 520 : 560)
-        let boardH = min(height * (compact ? 0.66 : 0.70), boardHCap)
+        let boardH: CGFloat = {
+            if expandedLayout {
+                // iPad / large canvas: grow the felt to fill space under chrome instead of a ~560pt phone cap.
+                let chrome: CGFloat = 220
+                let available = height - safeInsets.top - safeInsets.bottom - chrome
+                return max(340, min(available - 8, height * 0.82))
+            }
+            let boardHCap: CGFloat = tallBoard ? (compact ? 560 : 600) : (compact ? 520 : 560)
+            return min(height * (compact ? 0.66 : 0.70), boardHCap)
+        }()
 
         // Seats: N + up to two on each side (E/W) + S/local.
         let eastTop: Player?
@@ -181,34 +221,35 @@ struct GameTableView: View {
 
         // Player seat cards (shrunken slightly when six seats share the rim).
         let seatScale: CGFloat = opponents.count > 3 ? 0.92 : 1.0
-        let seatCardW: CGFloat = max(18, CGFloat(compact ? 26 : 30) * seatScale)
+        let seatCardW: CGFloat = max(18, CGFloat(compact ? 26 : 30) * seatScale * dimensionScale)
         let seatCardH: CGFloat = seatCardW * 1.35
 
         let padX = boardW * 0.08
         let padY = boardH * 0.10
         // Extra inset so E/W seats (especially the card column) aren’t flush with the table rim.
         let sideSeatInset = max(20, seatCardH * 0.18)
+        let rimLine: CGFloat = 3 * min(max(dimensionScale, 1), 1.35)
 
         return ZStack {
             RoundedRectangle(cornerRadius: 24)
                 .fill(bgTable)
-                .overlay(RoundedRectangle(cornerRadius: 24).stroke(tableBorder.opacity(0.55), lineWidth: 3))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(tableBorder.opacity(0.55), lineWidth: rimLine))
                 .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
 
             // Center piles.
-            centerPiles(compact: compact, pileW: max(28, seatCardW * 1.6))
+            centerPiles(compact: compact, pileW: max(28, seatCardW * 1.6), layoutScale: dimensionScale)
 
             // N — cards toward top edge, name below toward center
-            seatView(player: north, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .north)
+            seatView(player: north, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: .north, layoutScale: dimensionScale)
                 .position(x: boardW / 2, y: padY)
             // S (local) — name toward center, cards toward bottom edge
-            seatView(player: south, isLocal: true, seatCardW: seatCardW, seatCardH: seatCardH, position: .south)
+            seatView(player: south, isLocal: true, seatCardW: seatCardW, seatCardH: seatCardH, position: .south, layoutScale: dimensionScale)
                 .position(x: boardW / 2, y: boardH - padY)
             // E — up to two stacked seats along the right rim
-            eastWestStack(top: eastTop, bottom: eastBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .east)
+            eastWestStack(top: eastTop, bottom: eastBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .east, layoutScale: dimensionScale)
                 .position(x: boardW - padX - sideSeatInset, y: boardH / 2)
             // W — up to two stacked seats along the left rim
-            eastWestStack(top: westTop, bottom: westBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .west)
+            eastWestStack(top: westTop, bottom: westBottom, seatCardW: seatCardW, seatCardH: seatCardH, position: .west, layoutScale: dimensionScale)
                 .position(x: padX + sideSeatInset, y: boardH / 2)
         }
         .frame(width: boardW, height: boardH)
@@ -241,22 +282,21 @@ struct GameTableView: View {
         bottom: Player?,
         seatCardW: CGFloat,
         seatCardH: CGFloat,
-        position: TableSeatPosition
+        position: TableSeatPosition,
+        layoutScale: CGFloat
     ) -> some View {
         switch (top, bottom) {
         case (nil, nil):
             EmptyView()
         case let (t?, b?):
             VStack(spacing: 24) {
-                seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
-                seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+                seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position, layoutScale: layoutScale)
+                seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position, layoutScale: layoutScale)
             }
         case let (t?, nil):
-            seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
+            seatView(player: t, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position, layoutScale: layoutScale)
         case let (nil, b?):
-            seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position)
-        default:
-            EmptyView()
+            seatView(player: b, isLocal: false, seatCardW: seatCardW, seatCardH: seatCardH, position: position, layoutScale: layoutScale)
         }
     }
 
@@ -265,12 +305,13 @@ struct GameTableView: View {
         isLocal: Bool,
         seatCardW: CGFloat,
         seatCardH: CGFloat,
-        position: TableSeatPosition
+        position: TableSeatPosition,
+        layoutScale: CGFloat
     ) -> some View {
         return Group {
             if let player {
                 let indices = Array(player.hand.indices.prefix(4))
-                let nameLabel = seatNameLabel(isLocal: isLocal, player: player)
+                let nameLabel = seatNameLabel(isLocal: isLocal, player: player, layoutScale: layoutScale)
 
                 switch position {
                 case .north:
@@ -325,7 +366,7 @@ struct GameTableView: View {
                 }
             } else {
                 Text("Empty")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: min(13, 9 * layoutScale), weight: .semibold))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -363,9 +404,9 @@ struct GameTableView: View {
     }
 
     @ViewBuilder
-    private func seatNameLabel(isLocal: Bool, player: Player) -> some View {
+    private func seatNameLabel(isLocal: Bool, player: Player, layoutScale: CGFloat) -> some View {
         Text(isLocal ? "You" : resolvedDisplayName(for: player))
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: min(14, 10 * layoutScale), weight: .semibold))
             .foregroundColor(
                 isLocal
                     ? accentGold
@@ -485,24 +526,26 @@ struct GameTableView: View {
         .opacity(0.35)
     }
 
-    private func centerPiles(compact: Bool, pileW: CGFloat) -> some View {
+    private func centerPiles(compact: Bool, pileW: CGFloat, layoutScale: CGFloat) -> some View {
         let w: CGFloat = pileW
         let h = w * 1.4
-        return HStack(spacing: compact ? 16 : 24) {
+        let labelFs = min(13, 9 * layoutScale)
+        let pileSpacing: CGFloat = compact ? 16 : min(32, 24 * layoutScale)
+        return HStack(spacing: pileSpacing) {
             VStack(spacing: 3) {
-                Text("Discard").font(.system(size: 9)).foregroundColor(.white.opacity(0.6))
+                Text("Discard").font(.system(size: labelFs)).foregroundColor(.white.opacity(0.6))
                 if let top = viewModel.gameState.discardPile.last {
-                    pileView(text: top.shortName, isFaceUp: true, width: w, height: h)
+                    pileView(text: top.shortName, isFaceUp: true, width: w, height: h, layoutScale: layoutScale)
                 } else {
-                    pileView(text: "", isFaceUp: false, width: w, height: h, isEmpty: true)
+                    pileView(text: "", isFaceUp: false, width: w, height: h, isEmpty: true, layoutScale: layoutScale)
                 }
             }
             VStack(spacing: 3) {
-                Text(viewModel.gameState.pendingDraw != nil ? "Drawn" : "Deck").font(.system(size: 9)).foregroundColor(viewModel.gameState.pendingDraw != nil ? accentGold : .white.opacity(0.6))
+                Text(viewModel.gameState.pendingDraw != nil ? "Drawn" : "Deck").font(.system(size: labelFs)).foregroundColor(viewModel.gameState.pendingDraw != nil ? accentGold : .white.opacity(0.6))
                 if isMyTurn, let pending = viewModel.gameState.pendingDraw?.card {
-                    pileView(text: pending.shortName, isFaceUp: true, width: w, height: h, highlight: true)
+                    pileView(text: pending.shortName, isFaceUp: true, width: w, height: h, highlight: true, layoutScale: layoutScale)
                 } else {
-                    pileView(text: "", isFaceUp: false, width: w, height: h)
+                    pileView(text: "", isFaceUp: false, width: w, height: h, layoutScale: layoutScale)
                 }
             }
         }
@@ -529,34 +572,66 @@ struct GameTableView: View {
         .cornerRadius(10)
     }
 
-    private var statusBanner: some View {
+    private func statusBanner(layoutScale: CGFloat) -> some View {
         Group {
             if let winnerID = viewModel.gameState.winnerID,
                let winner = viewModel.gameState.players.first(where: { $0.id == winnerID }) {
-                statusPill("Winner: \(winner.name) (\(winner.score()) pts)", color: .mint)
+                statusPill("Winner: \(winner.name) (\(winner.score()) pts)", color: .mint, layoutScale: layoutScale)
             } else if let callerID = viewModel.gameState.caboCallerID,
                       let caller = viewModel.gameState.players.first(where: { $0.id == callerID }) {
-                statusPill("Cabo! \(caller.name) - Final turns", color: .orange)
+                statusPill("Cabo! \(caller.name) - Final turns", color: .orange, layoutScale: layoutScale)
             } else if viewModel.gameState.phase == .waitingForSpecialResolution && isMyTurn {
                 // Only the player resolving the special should see the
                 // explanation text; opponents shouldn't be told what the
                 // active card is.
-                statusPill(powerTextForSpecial(), color: accentGreen)
+                statusPill(powerTextForSpecial(), color: accentGreen, layoutScale: layoutScale)
             } else {
                 EmptyView()
             }
         }
     }
 
-    private var matchResultBanner: some View {
+    private func matchResultBanner(layoutScale: CGFloat) -> some View {
         Group {
             if let matchStatus = viewModel.matchDiscardStatusText {
                 let isCorrect = matchStatus.lowercased().hasPrefix("correct")
-                statusPill(matchStatus, color: isCorrect ? accentGreen : .red)
+                if isCorrect {
+                    statusPill(matchStatus, color: accentGreen, layoutScale: layoutScale)
+                } else {
+                    wrongMatchBanner(matchStatus, layoutScale: layoutScale)
+                }
             } else {
                 EmptyView()
             }
         }
+        .animation(.easeInOut(duration: 0.22), value: viewModel.matchDiscardStatusText)
+    }
+
+    private func wrongMatchBanner(_ message: String, layoutScale: CGFloat) -> some View {
+        let bodyFs = min(17, 14 * layoutScale)
+        let iconSz = min(24, 20 * layoutScale)
+        return HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "xmark.circle.fill")
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(Color(red: 1, green: 0.38, blue: 0.38), Color.white.opacity(0.95))
+                .font(.system(size: iconSz, weight: .bold))
+            Text(message)
+                .font(.system(size: bodyFs, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.white)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, max(14, 14 * layoutScale))
+        .padding(.vertical, max(12, 11 * layoutScale))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.red.opacity(0.22))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.red.opacity(0.45), lineWidth: 1)
+                )
+        )
     }
 
     private func powerTextForSpecial() -> String {
@@ -573,9 +648,11 @@ struct GameTableView: View {
         }
     }
 
-    private func controls(compact: Bool) -> some View {
-        let h: CGFloat = compact ? 36 : 40
-        let fs: CGFloat = compact ? 11 : 12
+    private func controls(compact: Bool, layoutScale: CGFloat) -> some View {
+        let baseH: CGFloat = compact ? 36 : 40
+        let baseFs: CGFloat = compact ? 11 : 12
+        let h: CGFloat = min(52, baseH * layoutScale)
+        let fs: CGFloat = min(16, baseFs * layoutScale)
         return Group {
             if viewModel.gameState.winnerID != nil {
                 HStack {
@@ -663,7 +740,7 @@ struct GameTableView: View {
 
     private func action(_ title: String, primary: Bool, h: CGFloat, fs: CGFloat, accent: Color? = nil, onTap: @escaping () -> Void) -> some View {
         Button(action: onTap) {
-            Text(title).font(.system(size: fs, weight: .semibold)).foregroundColor(primary ? bgDark : .white)
+            Text(title).font(.system(size: fs, weight: .semibold)).foregroundColor(primary ? boardTheme.actionLabelOnPrimary : .white)
                 .frame(maxWidth: .infinity).frame(height: h)
                 .background(primary ? (accent ?? accentGreen) : Color.white.opacity(0.12))
                 .cornerRadius(8)
@@ -671,8 +748,17 @@ struct GameTableView: View {
     }
 
     private func cardView(text: String, isFaceUp: Bool, isEmpty: Bool, isSelected: Bool, kingSwapHighlight: Bool = false, width: CGFloat, height: CGFloat, faceTextRotation: Angle = .zero) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 5).fill(isEmpty ? Color.white.opacity(0.05) : (isFaceUp ? .white : cardBack))
+        let deck = cardDeck
+        return ZStack {
+            Group {
+                if isEmpty {
+                    RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.05))
+                } else if isFaceUp {
+                    RoundedRectangle(cornerRadius: 5).fill(deck.faceBackground)
+                } else {
+                    CardBackArt(deck: deck, cornerRadius: 5)
+                }
+            }
             RoundedRectangle(cornerRadius: 5).stroke(
                 kingSwapHighlight ? Color.red.opacity(0.95) : (isSelected ? accentGold : Color.white.opacity(0.2)),
                 lineWidth: kingSwapHighlight ? 2.8 : (isSelected ? 2 : 0.8)
@@ -686,15 +772,25 @@ struct GameTableView: View {
                 }
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .font(.system(size: width > 44 ? (height <= 34 ? 11 : 14) : 10, weight: .bold))
-                .foregroundColor(cardColor(text))
+                .foregroundColor(deck.suitColor(for: text))
                 .rotationEffect(faceTextRotation)
             }
         }.frame(width: width, height: height)
     }
 
-    private func pileView(text: String, isFaceUp: Bool, width: CGFloat, height: CGFloat, isEmpty: Bool = false, highlight: Bool = false) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7).fill(isEmpty ? Color.white.opacity(0.08) : (isFaceUp ? .white : cardBack))
+    private func pileView(text: String, isFaceUp: Bool, width: CGFloat, height: CGFloat, isEmpty: Bool = false, highlight: Bool = false, layoutScale: CGFloat = 1) -> some View {
+        let rankFs = min(22, 16 * layoutScale)
+        let deck = cardDeck
+        return ZStack {
+            Group {
+                if isEmpty {
+                    RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.08))
+                } else if isFaceUp {
+                    RoundedRectangle(cornerRadius: 7).fill(deck.faceBackground)
+                } else {
+                    CardBackArt(deck: deck, cornerRadius: 7)
+                }
+            }
             RoundedRectangle(cornerRadius: 7).stroke(highlight ? accentGold : Color.white.opacity(0.25), lineWidth: highlight ? 2.5 : 1)
             if isEmpty {
                 RoundedRectangle(cornerRadius: 5).stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4])).foregroundColor(.white.opacity(0.2)).padding(4)
@@ -704,7 +800,7 @@ struct GameTableView: View {
                     Text(cardSuit(from: text))
                 }
                 .lineLimit(1).minimumScaleFactor(0.7)
-                .font(.system(size: 16, weight: .bold)).foregroundColor(cardColor(text))
+                .font(.system(size: rankFs, weight: .bold)).foregroundColor(deck.suitColor(for: text))
             }
         }.frame(width: width, height: height).shadow(color: .black.opacity(0.3), radius: 4, y: 2)
     }
@@ -713,16 +809,15 @@ struct GameTableView: View {
         RoundedRectangle(cornerRadius: 5).stroke(style: StrokeStyle(lineWidth: 0.8, dash: [3, 3])).foregroundColor(.white.opacity(0.15)).frame(width: w, height: h)
     }
 
-    private func statusPill(_ text: String, color: Color) -> some View {
-        Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 6).background(color.opacity(0.3)).cornerRadius(8)
+    private func statusPill(_ text: String, color: Color, layoutScale: CGFloat) -> some View {
+        let fs = min(15, 12 * layoutScale)
+        return Text(text).font(.system(size: fs, weight: .semibold)).foregroundColor(.white).padding(.horizontal, 12).padding(.vertical, 6).background(color.opacity(0.3)).cornerRadius(8)
     }
 
     private func cardSuit(from text: String) -> String {
         guard let last = text.last, "♥♦♣♠".contains(last) else { return "" }
         return String(last)
     }
-
-    private func cardColor(_ text: String) -> Color { (text.contains("♥") || text.contains("♦")) ? .red : .black }
     private var localPlayer: Player? {
         guard let localID = viewModel.localPlayerID else { return nil }
         return viewModel.gameState.players.first { $0.id == localID }

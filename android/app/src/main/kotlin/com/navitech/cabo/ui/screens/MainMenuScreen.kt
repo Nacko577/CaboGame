@@ -1,15 +1,19 @@
 package com.navitech.cabo.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -21,9 +25,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.navitech.cabo.BuildConfig
+import com.navitech.cabo.support.FeedbackSupport
 
 @Composable
-fun MainMenuScreen(onPlay: () -> Unit, onHowToPlay: () -> Unit) {
+fun MainMenuScreen(onPlay: () -> Unit, onHowToPlay: () -> Unit, onTableLook: () -> Unit) {
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -205,12 +212,65 @@ fun MainMenuScreen(onPlay: () -> Unit, onHowToPlay: () -> Unit) {
                             fontFamily = FontFamily.SansSerif
                         )
                     }
+
+                    OutlinedButton(
+                        onClick = onTableLook,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.85f)),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(Color.White.copy(alpha = 0.15f))
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    ) {
+                        Icon(Icons.Filled.Palette, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Table look",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (!FeedbackSupport.openFeedbackEmail(context)) {
+                                Toast.makeText(
+                                        context,
+                                        "No email app found. Write to ${FeedbackSupport.RECIPIENT_EMAIL}",
+                                        Toast.LENGTH_LONG
+                                    )
+                                    .show()
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.85f)),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(Color.White.copy(alpha = 0.15f))
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+                    ) {
+                        Icon(Icons.Filled.Email, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Send Feedback",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
 
                 Text(
-                    "v1.0",
+                    "v${BuildConfig.VERSION_NAME}",
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.25f)),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )

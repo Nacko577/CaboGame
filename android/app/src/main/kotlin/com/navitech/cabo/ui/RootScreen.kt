@@ -7,33 +7,35 @@ import com.navitech.cabo.ui.screens.*
 import com.navitech.cabo.viewmodel.GameViewModel
 import kotlinx.coroutines.delay
 
-private enum class RootScreen { LOADING, MENU, LOBBY, HOW_TO_PLAY }
+private enum class RootRoute { LOADING, MENU, LOBBY, HOW_TO_PLAY, APPEARANCE }
 
 @Composable
 fun RootScreen(viewModel: GameViewModel) {
-    var screen by rememberSaveable { mutableStateOf(RootScreen.LOADING) }
+    var screen by rememberSaveable { mutableStateOf(RootRoute.LOADING) }
 
-    BackHandler(enabled = screen == RootScreen.HOW_TO_PLAY) {
-        screen = RootScreen.MENU
+    BackHandler(enabled = screen == RootRoute.HOW_TO_PLAY || screen == RootRoute.APPEARANCE) {
+        screen = RootRoute.MENU
     }
-    BackHandler(enabled = screen == RootScreen.LOBBY && !viewModel.gameState.hasStarted) {
+    BackHandler(enabled = screen == RootRoute.LOBBY && !viewModel.gameState.hasStarted) {
         viewModel.leaveLobby()
-        screen = RootScreen.MENU
+        screen = RootRoute.MENU
     }
 
     LaunchedEffect(Unit) {
-        if (screen == RootScreen.LOADING) {
+        if (screen == RootRoute.LOADING) {
             delay(1_800)
-            screen = RootScreen.MENU
+            screen = RootRoute.MENU
         }
     }
 
     when {
-        screen == RootScreen.LOADING -> SplashScreen()
-        screen == RootScreen.HOW_TO_PLAY -> HowToPlayScreen(onBack = { screen = RootScreen.MENU })
-        screen == RootScreen.MENU -> MainMenuScreen(
-            onPlay = { screen = RootScreen.LOBBY },
-            onHowToPlay = { screen = RootScreen.HOW_TO_PLAY }
+        screen == RootRoute.LOADING -> SplashScreen()
+        screen == RootRoute.HOW_TO_PLAY -> HowToPlayScreen(onBack = { screen = RootRoute.MENU })
+        screen == RootRoute.APPEARANCE -> AppearanceSettingsScreen(onBack = { screen = RootRoute.MENU })
+        screen == RootRoute.MENU -> MainMenuScreen(
+            onPlay = { screen = RootRoute.LOBBY },
+            onHowToPlay = { screen = RootRoute.HOW_TO_PLAY },
+            onTableLook = { screen = RootRoute.APPEARANCE },
         )
         viewModel.gameState.hasStarted -> GameTableScreen(
             viewModel = viewModel,
@@ -43,7 +45,7 @@ fun RootScreen(viewModel: GameViewModel) {
             viewModel = viewModel,
             onBack = {
                 viewModel.leaveLobby()
-                screen = RootScreen.MENU
+                screen = RootRoute.MENU
             }
         )
     }

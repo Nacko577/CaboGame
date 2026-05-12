@@ -154,6 +154,9 @@ struct HowToPlayView: View {
         }
         .navigationTitle("How To Play")
         .navigationBarTitleDisplayMode(.inline)
+        .preferredColorScheme(.dark)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     private func guideSection<Content: View>(title: String, caption: String, @ViewBuilder content: () -> Content) -> some View {

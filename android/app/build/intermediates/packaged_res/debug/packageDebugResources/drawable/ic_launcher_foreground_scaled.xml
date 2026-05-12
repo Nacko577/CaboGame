@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ~5% zoom: expand foreground by 108dp × 0.05 ÷ 2 ≈ 2.7dp per side (subtle vs raw mipmap). -->
+    <item
+        android:drawable="@mipmap/ic_launcher_foreground"
+        android:left="-2.7dp"
+        android:top="-2.7dp"
+        android:right="-2.7dp"
+        android:bottom="-2.7dp" />
+</layer-list>

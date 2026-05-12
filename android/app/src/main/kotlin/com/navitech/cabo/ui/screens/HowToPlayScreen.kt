@@ -62,7 +62,11 @@ fun HowToPlayScreen(onBack: () -> Unit) {
                             Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                    )
                 )
             },
             containerColor = Color.Transparent

@@ -56,6 +56,10 @@ final class GameViewModel: ObservableObject {
     /// field after entering the lobby doesn't break self-identification.
     private var sessionDisplayName: String?
 
+    /// Guest: index sent with Match — used to infer outcome after authoritative `gameState` arrives.
+    private var pendingGuestMatchHandIndex: Int?
+    private var pendingGuestMatchWasCurrentTurn = false
+
     init(lobby: LobbyService? = nil) {
         let initial: LobbyService = lobby ?? RemoteLobbyService()
         self.lobby = initial
@@ -237,6 +241,8 @@ final class GameViewModel: ObservableObject {
                 scheduleMatchDiscardClear()
                 try lobby.send(.gameState(gameState))
             } else {
+                pendingGuestMatchHandIndex = index
+                pendingGuestMatchWasCurrentTurn = gameState.currentPlayerID == playerID
                 matchAwaitingDiscardOutcome = true
                 matchAwaitingDiscardBaseline = discardSignature(stateBefore)
                 try lobby.send(.playerAction(.attemptMatchDiscard(playerID: playerID, index: index)))
@@ -244,6 +250,8 @@ final class GameViewModel: ObservableObject {
         } catch {
             matchAwaitingDiscardOutcome = false
             matchAwaitingDiscardBaseline = nil
+            pendingGuestMatchHandIndex = nil
+            pendingGuestMatchWasCurrentTurn = false
             lastError = error.localizedDescription
         }
     }
@@ -425,6 +433,8 @@ final class GameViewModel: ObservableObject {
         matchDiscardLockBaseline = nil
         matchAwaitingDiscardOutcome = false
         matchAwaitingDiscardBaseline = nil
+        pendingGuestMatchHandIndex = nil
+        pendingGuestMatchWasCurrentTurn = false
         isMatchDisabledAfterWrongGuess = false
     }
 
@@ -469,8 +479,23 @@ final class GameViewModel: ObservableObject {
             return "Correct match! Card removed from your hand."
         }
         return wasCurrentTurn
-            ? "Wrong match. Your turn is skipped."
-            : "Wrong match. You will sit out your next turn."
+            ? "Wrong match — those cards don’t match. Your turn is skipped."
+            : "Wrong match — those cards don’t match. You’ll sit out your next turn."
+    }
+
+    /// Guests don’t run the engine locally; after the host broadcasts state, infer whether the slot emptied (correct) or not (wrong).
+    private func deliverGuestMatchDiscardFeedbackIfNeeded(incoming: GameState, handIndex: Int?, wasCurrentTurn: Bool) {
+        defer {
+            pendingGuestMatchHandIndex = nil
+            pendingGuestMatchWasCurrentTurn = false
+        }
+        guard let localID = localPlayerID,
+              let idx = handIndex,
+              let p = incoming.players.first(where: { $0.id == localID }),
+              p.hand.indices.contains(idx) else { return }
+        let matched = (p.hand[idx] == nil)
+        matchDiscardStatusText = matchStatusText(matched: matched, wasCurrentTurn: wasCurrentTurn)
+        scheduleMatchDiscardClear()
     }
 
     private func clearMatchDiscardFeedback() {
@@ -705,6 +730,9 @@ extension GameViewModel: LobbyServiceDelegate {
             case .lobbyState:
                 break
             case .gameState(let incoming):
+                let guestShouldResolveMatchFeedback = !self.isHost && self.matchAwaitingDiscardOutcome
+                let guestMatchIdx = self.pendingGuestMatchHandIndex
+                let guestMatchWasTurn = self.pendingGuestMatchWasCurrentTurn
                 if incoming.winnerID != nil || incoming.phase == .initialPeek {
                     self.resetMatchDiscardWrongGuessLock()
                 }
@@ -713,6 +741,13 @@ extension GameViewModel: LobbyServiceDelegate {
                 self.gameState = incoming
                 self.engine.load(state: incoming)
                 self.reconcileLocalPlayerID(with: incoming)
+                if guestShouldResolveMatchFeedback {
+                    self.deliverGuestMatchDiscardFeedbackIfNeeded(
+                        incoming: incoming,
+                        handIndex: guestMatchIdx,
+                        wasCurrentTurn: guestMatchWasTurn
+                    )
+                }
                 if incoming.phase == .initialPeek {
                     self.clearSpecialPeekFeedback()
                     let pid = self.localPlayerID ?? self.identifyLocalPlayer(in: incoming)?.id

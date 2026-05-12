@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.drawBehind
@@ -31,10 +32,15 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.navitech.cabo.models.*
-import com.navitech.cabo.ui.theme.CardBack
-import com.navitech.cabo.ui.theme.GreenDark
-import com.navitech.cabo.ui.theme.GreenDeep
+import com.navitech.cabo.ui.theme.BoardPalette
+import com.navitech.cabo.ui.theme.CardDeckStyle
+import com.navitech.cabo.ui.theme.TableAppearanceStore
+import com.navitech.cabo.ui.theme.drawCardBackFillAndPattern
+import com.navitech.cabo.ui.theme.faceBackground
+import com.navitech.cabo.ui.theme.palette
+import com.navitech.cabo.ui.theme.suitColor
 import com.navitech.cabo.viewmodel.GameViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.ceil
@@ -43,6 +49,10 @@ import kotlin.math.min
 @Composable
 fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     BackHandler(onBack = onLeaveGame)
+
+    val boardTheme by TableAppearanceStore.boardTheme.collectAsStateWithLifecycle()
+    val cardDeck by TableAppearanceStore.cardDeck.collectAsStateWithLifecycle()
+    val palette = boardTheme.palette()
 
     var selectedOwnIndex by remember { mutableIntStateOf(0) }
     var selectedOpponentIndex by remember { mutableIntStateOf(0) }
@@ -144,7 +154,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(GreenDark, GreenDeep)))
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(palette.gradientTop, palette.gradientBottom)))
     ) {
         Column(
             modifier = Modifier
@@ -158,8 +168,14 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                TextButton(onClick = onLeaveGame) {
-                    Text("Leave", color = Color.White)
+                TextButton(
+                    onClick = onLeaveGame,
+                    modifier = Modifier
+                        .border(1.dp, Color.White.copy(alpha = 0.42f), RoundedCornerShape(10.dp)),
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text("Leave", fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -174,17 +190,17 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     val remaining = maxOf(0, 2 - viewModel.initialPeekedOwnIndices.size)
                     StatusChip(
                         text = "Peeking",
-                        color = Color(0xFFF2BF4D),
+                        color = palette.accentGold,
                         modifier = Modifier.weight(1f)
                     )
                     StatusChip(
                         text = "Peek 2 cards (${remaining} left)",
-                        color = Color(0xFFF2BF4D),
+                        color = palette.accentGold,
                         modifier = Modifier.weight(1f)
                     )
                     StatusChip(
                         text = "Time left: ${viewModel.initialPeekSecondsRemaining ?: 0}s",
-                        color = Color(0xFFF2BF4D),
+                        color = palette.accentGold,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -194,10 +210,10 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val headerText = if (isMyTurn) "Your Turn" else "${currentTurnName}'s turn"
-                    val headerColor = if (isMyTurn) Color(0xFF4CAF50) else Color(0xFFF2BF4D)
+                    val headerColor = if (isMyTurn) palette.accentPrimary else palette.accentGold
                     StatusChip(headerText, color = headerColor, modifier = Modifier.weight(1f))
                     if (displayTurnSecs >= 0) {
-                        val timerColor = if (displayTurnSecs <= 5) Color(0xFFE53935) else Color(0xFFF2BF4D)
+                        val timerColor = if (displayTurnSecs <= 5) Color(0xFFE53935) else palette.accentGold
                         StatusChip("${displayTurnSecs}s", color = timerColor, modifier = Modifier.weight(1f))
                     }
                     localPlayer?.let { me ->
@@ -214,11 +230,11 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
 
             // Match-result banner sits above the table so the player gets
             // immediate, prominent feedback about their match attempt.
-            viewModel.matchDiscardStatusText?.let { matchStatus ->
+                viewModel.matchDiscardStatusText?.let { matchStatus ->
                 val isCorrect = matchStatus.startsWith("Correct", ignoreCase = true)
                 StatusChip(
                     text = matchStatus,
-                    color = if (isCorrect) Color(0xFF4CAF50) else Color(0xFFE53935),
+                    color = if (isCorrect) palette.accentPrimary else Color(0xFFE53935),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -250,8 +266,8 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     .width(boardW)
                     .height(boardH)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Color(0xFF15281E))
-                    .border(2.dp, Color(0xFF2E8E67), RoundedCornerShape(24.dp))
+                    .background(palette.felt)
+                    .border(2.dp, palette.feltBorder, RoundedCornerShape(24.dp))
             ) {
                     // Center piles
                     Row(
@@ -261,7 +277,15 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Discard", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             val top = gameState.discardPile.lastOrNull()
-                            TableCard(text = top?.shortName ?: "", isFaceUp = top != null, isSelected = false, isEmpty = top == null, width = 48.dp, height = 68.dp)
+                            TableCard(
+                                text = top?.shortName ?: "",
+                                isFaceUp = top != null,
+                                isSelected = false,
+                                isEmpty = top == null,
+                                width = 48.dp,
+                                height = 68.dp,
+                                cardDeck = cardDeck,
+                            )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Drawn", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -276,7 +300,8 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                                 isSelected = drawnText != null && isMyTurn && gameState.pendingDraw != null,
                                 isEmpty = drawnText == null,
                                 width = 48.dp,
-                                height = 68.dp
+                                height = 68.dp,
+                                cardDeck = cardDeck,
                             )
                         }
                     }
@@ -295,7 +320,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOwn = { selectedOwnIndex = it },
                         selectedOpponentID = selectedOpponentID,
                         selectedOpponentIndex = selectedOpponentIndex,
-                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
+                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx },
+                        palette = palette,
+                        cardDeck = cardDeck,
                     )
 
                     // South seat (local) — name above row (toward center)
@@ -312,7 +339,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOwn = { selectedOwnIndex = it },
                         selectedOpponentID = selectedOpponentID,
                         selectedOpponentIndex = selectedOpponentIndex,
-                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
+                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx },
+                        palette = palette,
+                        cardDeck = cardDeck,
                     )
 
                     // East — up to two stacked seats inset from the right rim
@@ -331,7 +360,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOwn = { selectedOwnIndex = it },
                         selectedOpponentID = selectedOpponentID,
                         selectedOpponentIndex = selectedOpponentIndex,
-                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
+                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx },
+                        palette = palette,
+                        cardDeck = cardDeck,
                     )
 
                     // West — up to two stacked seats inset from the left rim
@@ -350,7 +381,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                         onSelectOwn = { selectedOwnIndex = it },
                         selectedOpponentID = selectedOpponentID,
                         selectedOpponentIndex = selectedOpponentIndex,
-                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx }
+                        onSelectOpponent = { id, idx -> selectedOpponentID = id; selectedOpponentIndex = idx },
+                        palette = palette,
+                        cardDeck = cardDeck,
                     )
             }
 
@@ -373,8 +406,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        ActionButton(
-                                            label = "Peek",
+                                ActionButton(
+                                    palette = palette,
+                                    label = "Peek",
                                             primary = true,
                                             enabled = mySelectedCard != null,
                                             onClick = {
@@ -396,8 +430,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        ActionButton(
-                                            label = "Peek",
+                                ActionButton(
+                                    palette = palette,
+                                    label = "Peek",
                                             primary = true,
                                             enabled = opponentSelectedCard != null,
                                             onClick = {
@@ -419,8 +454,9 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        ActionButton(
-                                            label = "Swap",
+                                ActionButton(
+                                    palette = palette,
+                                    label = "Swap",
                                             primary = true,
                                             enabled = mySelectedCard != null && opponentSelectedCard != null,
                                             onClick = {
@@ -448,17 +484,20 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                             // Row 2: Replace   | Discard      | Cabo!
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ActionButton(
+                                    palette = palette,
                                     label = "Draw Deck",
                                     primary = true,
                                     enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
                                     onClick = { viewModel.draw(DrawSource.DECK) }
                                 )
                                 ActionButton(
+                                    palette = palette,
                                     label = "Draw Discard",
                                     enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_DRAW,
                                     onClick = { viewModel.draw(DrawSource.DISCARD_TOP) }
                                 )
                                 ActionButton(
+                                    palette = palette,
                                     label = "Match",
                                     enabled = gameState.phase != TurnPhase.INITIAL_PEEK && localPlayer != null && !viewModel.isMatchDisabledAfterWrongGuess,
                                     onClick = { viewModel.attemptMatchDiscard(selectedOwnIndex) }
@@ -467,19 +506,22 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
 
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ActionButton(
+                                    palette = palette,
                                     label = "Replace",
                                     primary = true,
                                     enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
                                     onClick = { viewModel.replaceWithDrawnCard(selectedOwnIndex) }
                                 )
                                 ActionButton(
+                                    palette = palette,
                                     label = "Discard",
                                     enabled = isMyTurn && gameState.phase == TurnPhase.WAITING_FOR_PLACEMENT_OR_DISCARD,
                                     onClick = { viewModel.discardForEffect() }
                                 )
                                 ActionButton(
+                                    palette = palette,
                                     label = "Cabo!",
-                                    accentColor = Color(0xFFF2BF4D),
+                                    accentColor = palette.accentGold,
                                     enabled = isMyTurn &&
                                         gameState.phase == TurnPhase.WAITING_FOR_DRAW &&
                                         gameState.pendingDraw == null &&
@@ -528,7 +570,7 @@ fun GameTableScreen(viewModel: GameViewModel, onLeaveGame: () -> Unit) {
                     // Only the player resolving the special should see the
                     // explanation text; opponents shouldn't be told what the
                     // active card is.
-                    StatusChip(specialPowerText, color = Color(0xFF2EBF8C))
+                    StatusChip(specialPowerText, color = palette.accentPrimary)
                 }
             }
 
@@ -553,6 +595,7 @@ private fun PortraitHandCards(
     selectedOpponentID: String?,
     selectedOpponentIndex: Int,
     onSelectOpponent: (String, Int) -> Unit,
+    cardDeck: CardDeckStyle,
     cardWidth: Dp = 32.dp,
     cardHeight: Dp = 46.dp,
     faceSymbolRotationDegrees: Float = 0f,
@@ -580,6 +623,7 @@ private fun PortraitHandCards(
                     isEmpty = card == null,
                     width = cardWidth,
                     height = cardHeight,
+                    cardDeck = cardDeck,
                     onTap = {
                         if (isLocal) onSelectOwn(idx) else onSelectOpponent(player.id, idx)
                     },
@@ -615,6 +659,7 @@ private fun PortraitHandCards(
                     isEmpty = card == null,
                     width = cardWidth,
                     height = cardHeight,
+                    cardDeck = cardDeck,
                     onTap = {
                         if (isLocal) onSelectOwn(idx) else onSelectOpponent(player.id, idx)
                     },
@@ -643,6 +688,8 @@ private fun SideSeatColumn(
     selectedOpponentID: String?,
     selectedOpponentIndex: Int,
     onSelectOpponent: (String, Int) -> Unit,
+    palette: BoardPalette,
+    cardDeck: CardDeckStyle,
 ) {
     when {
         top != null && bottom != null -> Column(
@@ -663,6 +710,8 @@ private fun SideSeatColumn(
                 onSelectOpponent = onSelectOpponent,
                 seatCardW = seatCardW,
                 seatCardH = seatCardH,
+                palette = palette,
+                cardDeck = cardDeck,
             )
             SeatRow(
                 player = bottom,
@@ -677,6 +726,8 @@ private fun SideSeatColumn(
                 onSelectOpponent = onSelectOpponent,
                 seatCardW = seatCardW,
                 seatCardH = seatCardH,
+                palette = palette,
+                cardDeck = cardDeck,
             )
         }
         top != null -> SeatRow(
@@ -693,6 +744,8 @@ private fun SideSeatColumn(
             onSelectOpponent = onSelectOpponent,
             seatCardW = seatCardW,
             seatCardH = seatCardH,
+            palette = palette,
+            cardDeck = cardDeck,
         )
         bottom != null -> SeatRow(
             modifier = modifier,
@@ -708,6 +761,8 @@ private fun SideSeatColumn(
             onSelectOpponent = onSelectOpponent,
             seatCardW = seatCardW,
             seatCardH = seatCardH,
+            palette = palette,
+            cardDeck = cardDeck,
         )
         else -> Box(modifier = modifier) {}
     }
@@ -728,6 +783,8 @@ private fun SeatRow(
     onSelectOpponent: (String, Int) -> Unit,
     seatCardW: Dp = 32.dp,
     seatCardH: Dp = 46.dp,
+    palette: BoardPalette,
+    cardDeck: CardDeckStyle,
 ) {
     if (player == null) {
         Column(
@@ -740,7 +797,7 @@ private fun SeatRow(
         return
     }
     val isTurn = viewModel.gameState.currentPlayerID == player.id
-    val nameColor = if (isLocal) Color(0xFFF2BF4D) else if (isTurn) Color(0xFF4CAF50) else Color.White
+    val nameColor = if (isLocal) palette.accentGold else if (isTurn) palette.accentPrimary else Color.White
     val label = if (isLocal) "You" else player.name
     val (cardW, cardH) = when (tableSeat) {
         TableSeatPosition.East, TableSeatPosition.West -> seatCardH to seatCardW // landscape: long edge toward table center
@@ -776,6 +833,7 @@ private fun SeatRow(
             selectedOpponentID = selectedOpponentID,
             selectedOpponentIndex = selectedOpponentIndex,
             onSelectOpponent = onSelectOpponent,
+            cardDeck = cardDeck,
             cardWidth = cardW,
             cardHeight = cardH,
             faceSymbolRotationDegrees = faceSymbolRotation,
@@ -842,6 +900,7 @@ private fun SeatRow(
  */
 @Composable
 private fun RowScope.ActionButton(
+    palette: BoardPalette,
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
@@ -850,12 +909,10 @@ private fun RowScope.ActionButton(
     height: Dp = 40.dp,
     fontSize: TextUnit = 12.sp
 ) {
-    val accentGreen = Color(0xFF2EBF8C)
-    val bgDark = Color(0xFF101A14)
-    val baseFill = if (primary) (accentColor ?: accentGreen) else Color.White.copy(alpha = 0.12f)
+    val baseFill = if (primary) (accentColor ?: palette.accentPrimary) else Color.White.copy(alpha = 0.12f)
     val fillColor = if (enabled) baseFill else baseFill.copy(alpha = baseFill.alpha * 0.5f)
     val rawTextColor = when {
-        primary -> bgDark
+        primary -> palette.actionLabelOnPrimary
         accentColor != null -> accentColor
         else -> Color.White
     }
@@ -926,6 +983,7 @@ private fun TableCard(
     isSelected: Boolean,
     kingSwapOutline: Boolean = false,
     isEmpty: Boolean,
+    cardDeck: CardDeckStyle,
     width: Dp = 60.dp,
     height: Dp = 84.dp,
     modifier: Modifier = Modifier,
@@ -933,6 +991,9 @@ private fun TableCard(
     onDoubleTap: (() -> Unit)? = null,
     faceSymbolRotationDegrees: Float = 0f,
 ) {
+    val corner = 10.dp
+    val density = LocalDensity.current
+    val cornerPx = with(density) { corner.toPx() }
     val borderColor = when {
         kingSwapOutline -> Color(0xFFE53935)
         isSelected -> Color.Yellow.copy(alpha = 0.9f)
@@ -940,14 +1001,10 @@ private fun TableCard(
     }
     val borderWidth = when {
         kingSwapOutline -> 2.8.dp
-        isSelected -> 2.4.dp
-        else -> 1.2.dp
+        isSelected -> 2.dp
+        else -> 0.8.dp
     }
-    val bgColor = when {
-        isEmpty -> Color.White.copy(alpha = 0.05f)
-        isFaceUp -> Color.White
-        else -> CardBack
-    }
+    val faceTint = cardDeck.suitColor(text)
 
     val interactionSource = remember { MutableInteractionSource() }
     val gestureModifier = if (onTap != null || onDoubleTap != null) {
@@ -963,14 +1020,30 @@ private fun TableCard(
         modifier = modifier
             .width(width)
             .height(height)
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
-            .border(borderWidth, borderColor, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(corner))
+            .drawBehind {
+                when {
+                    isEmpty -> {
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.05f),
+                            cornerRadius = CornerRadius(cornerPx, cornerPx),
+                        )
+                    }
+                    isFaceUp -> {
+                        drawRoundRect(
+                            color = cardDeck.faceBackground(),
+                            cornerRadius = CornerRadius(cornerPx, cornerPx),
+                        )
+                    }
+                    else -> drawCardBackFillAndPattern(cardDeck, cornerPx)
+                }
+            }
+            .border(borderWidth, borderColor, RoundedCornerShape(corner))
             .then(gestureModifier)
             .then(
                 if (isEmpty) Modifier.drawBehind {
                     val stroke = Stroke(
-                        width = 1.2.dp.toPx(),
+                        width = 0.8.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
                     )
                     drawRoundRect(
@@ -1004,7 +1077,7 @@ private fun TableCard(
                                 else -> 11.sp
                             },
                             fontWeight = FontWeight.SemiBold,
-                            color = cardTextColor(text)
+                            color = faceTint
                         ),
                         maxLines = 1
                     )
@@ -1018,7 +1091,7 @@ private fun TableCard(
                                 else -> 11.sp
                             },
                             fontWeight = FontWeight.SemiBold,
-                            color = cardTextColor(text)
+                            color = faceTint
                         ),
                         maxLines = 1
                     )
@@ -1027,9 +1100,6 @@ private fun TableCard(
         }
     }
 }
-
-private fun cardTextColor(text: String): Color =
-    if (text.contains("♥") || text.contains("♦")) Color.Red else Color.Black
 
 private fun cardSuitText(text: String): String {
     val last = text.lastOrNull() ?: return ""

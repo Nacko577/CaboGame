@@ -1,8 +1,24 @@
 import SwiftUI
+import MessageUI
+import UIKit
+
+private enum BundleMarketingVersion {
+    static var footerLabel: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        return "v\(short)"
+    }
+}
 
 struct MainMenuView: View {
     let onPlay: () -> Void
-    
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var showMailComposer = false
+    @State private var mailUnavailableAlert = false
+
+    private var contentMaxWidth: CGFloat? {
+        horizontalSizeClass == .regular ? 520 : nil
+    }
+
     var body: some View {
         ZStack {
             // Rich gradient background
@@ -136,6 +152,46 @@ struct MainMenuView: View {
                         )
                     }
                     .buttonStyle(ScaleButtonStyle())
+
+                    NavigationLink {
+                        AppearanceSettingsView()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "paintpalette")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Table look")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+
+                    Button(action: sendFeedbackEmail) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "envelope.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Send Feedback")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(ScaleButtonStyle())
                 }
                 .padding(.horizontal, 32)
                 
@@ -143,14 +199,44 @@ struct MainMenuView: View {
                     .frame(height: 60)
                 
                 // Version text
-                Text("v1.0")
+                Text(BundleMarketingVersion.footerLabel)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.25))
                     .padding(.bottom, 20)
             }
+            .frame(maxWidth: contentMaxWidth ?? .infinity)
+            .frame(maxWidth: .infinity)
             .padding()
         }
         .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $showMailComposer) {
+            MailComposeView(subject: "Cabo feedback", body: FeedbackSupport.diagnosticFooter)
+        }
+        .alert("Email unavailable", isPresented: $mailUnavailableAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(
+                "This device can’t open Mail right now (common on Simulator). You can still write to \(FeedbackSupport.recipientEmail)."
+            )
+        }
+    }
+
+    private func sendFeedbackEmail() {
+        if MFMailComposeViewController.canSendMail() {
+            showMailComposer = true
+            return
+        }
+        guard let url = FeedbackSupport.mailtoURL() else {
+            mailUnavailableAlert = true
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { success in
+            Task { @MainActor in
+                if !success {
+                    mailUnavailableAlert = true
+                }
+            }
+        }
     }
 }
 

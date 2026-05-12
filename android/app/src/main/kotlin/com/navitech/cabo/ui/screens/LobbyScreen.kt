@@ -144,7 +144,7 @@ fun LobbyScreen(viewModel: GameViewModel, onBack: () -> Unit) {
                 }
                 Text(
                     if (viewModel.transport == LobbyTransport.ONLINE)
-                        "Play across the internet via the relay server."
+                        "Play across the internet via the server."
                     else
                         "Both players must be on the same Wi-Fi network.",
                     color = Color.White.copy(alpha = 0.4f),
